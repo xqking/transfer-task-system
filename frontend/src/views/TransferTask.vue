@@ -84,6 +84,31 @@
               </el-col>
             </el-row>
 
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="每次最低金额" prop="alloc_min">
+                  <el-input-number 
+                    v-model="taskForm.alloc_min" 
+                    :min="100" 
+                    :step="100"
+                    :precision="0"
+                    style="width: 100%;"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="每次最高金额" prop="alloc_max">
+                  <el-input-number 
+                    v-model="taskForm.alloc_max" 
+                    :min="100" 
+                    :step="100"
+                    :precision="0"
+                    style="width: 100%;"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
             <el-form-item>
               <el-button type="primary" @click="createTask" :loading="creating" size="large">
                 创建并智能分配
@@ -105,7 +130,7 @@
             />
             
             <el-table :data="allocationDetails" max-height="300" size="small">
-              <el-table-column prop="person_code" label="人员" width="80" />
+              <el-table-column prop="person_name" label="人员" width="100" />
               <el-table-column prop="task_date" label="日期" width="120" />
               <el-table-column prop="amount" label="金额" width="100">
                 <template #default="{ row }">
@@ -225,11 +250,7 @@
                   </el-descriptions>
                   
                   <el-table :data="getTaskDetails(row.id)" stripe size="small" max-height="300">
-                    <el-table-column prop="person_code" label="人员" width="150">
-                      <template #default="{ row }">
-                        {{ getPersonNameByCode(row.person_code) }}
-                      </template>
-                    </el-table-column>
+                    <el-table-column prop="person_name" label="人员" width="120" />
                     <el-table-column prop="task_date" label="任务日期" width="120" />
                     <el-table-column prop="amount" label="金额" width="100">
                       <template #default="{ row }">
@@ -327,6 +348,8 @@ const taskForm = ref({
   bank_id: '',
   total_amount: 30000,
   task_date: new Date().toISOString().slice(0, 10),
+  alloc_min: 2000,
+  alloc_max: 20000,
   remark: ''
 })
 
@@ -477,7 +500,9 @@ async function createTask() {
   try {
     const data = {
       ...taskForm.value,
-      excluded_person_ids: Array.from(unselectedPersonIds.value)
+      excluded_person_ids: Array.from(unselectedPersonIds.value),
+      alloc_min: taskForm.value.alloc_min,
+      alloc_max: taskForm.value.alloc_max
     }
     const res = await axios.post('/api/task/create', data)
     

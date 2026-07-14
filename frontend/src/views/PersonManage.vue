@@ -9,18 +9,7 @@
       </template>
 
       <el-table :data="personList" stripe style="width: 100%">
-        <el-table-column prop="code" label="编号" width="150" />
-        <el-table-column prop="name" label="姓名" width="150" />
-        <el-table-column prop="single_min" label="单次最小金额" width="150">
-          <template #default="{ row }">
-            ¥{{ row.single_min }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="single_max" label="单次最大金额" width="150">
-          <template #default="{ row }">
-            ¥{{ row.single_max }}
-          </template>
-        </el-table-column>
+        <el-table-column prop="name" label="姓名" width="200" />
         <el-table-column label="操作" fixed="right" width="200">
           <template #default="{ row }">
             <el-button size="small" @click="editPerson(row)">编辑</el-button>
@@ -32,17 +21,8 @@
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑人员' : '添加人员'" width="500px">
       <el-form :model="form" label-width="120px">
-        <el-form-item label="人员编号" required>
-          <el-input v-model="form.code" placeholder="如：001" :disabled="isEdit" />
-        </el-form-item>
         <el-form-item label="姓名" required>
           <el-input v-model="form.name" placeholder="请输入姓名" />
-        </el-form-item>
-        <el-form-item label="单次最小金额">
-          <el-input-number v-model="form.single_min" :min="0" :step="100" />
-        </el-form-item>
-        <el-form-item label="单次最大金额">
-          <el-input-number v-model="form.single_max" :min="0" :step="100" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -64,10 +44,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const form = ref({
-  code: '',
-  name: '',
-  single_min: 2000,
-  single_max: 6000
+  name: ''
 })
 
 onMounted(loadPersonList)
@@ -85,10 +62,7 @@ function showAddDialog() {
   isEdit.value = false
   editId.value = null
   form.value = {
-    code: '',
-    name: '',
-    single_min: 2000,
-    single_max: 6000
+    name: ''
   }
   dialogVisible.value = true
 }
@@ -101,8 +75,8 @@ function editPerson(row) {
 }
 
 async function submitForm() {
-  if (!form.value.code) {
-    ElMessage.warning('请填写人员编号')
+  if (!form.value.name) {
+    ElMessage.warning('请填写姓名')
     return
   }
   

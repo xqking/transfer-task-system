@@ -18,8 +18,6 @@ class Person(db.Model):
     name = db.Column(db.String(50), default='', comment='人员姓名')
     status = db.Column(db.Integer, default=1, comment='状态 1-可用 0-不可用')
     daily_limit = db.Column(db.Float, default=6000, comment='单日转账上限')
-    single_min = db.Column(db.Float, default=2000, comment='单次最小金额')
-    single_max = db.Column(db.Float, default=6000, comment='单次最大金额')
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -76,6 +74,8 @@ class TaskDetail(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey('persons.id'), nullable=False)
     card_id = db.Column(db.Integer, db.ForeignKey('bank_cards.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False, comment='转账金额')
+    wechat_amount = db.Column(db.Float, default=0, comment='微信金额')
+    alipay_amount = db.Column(db.Float, default=0, comment='支付宝金额')
     task_date = db.Column(db.Date, nullable=False, comment='任务日期')
     status = db.Column(db.String(20), default='pending', comment='状态 pending-待执行 completed-已完成 failed-失败')
     execute_time = db.Column(db.DateTime, comment='实际执行时间')

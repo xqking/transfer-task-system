@@ -4,7 +4,6 @@ import PersonManage from '../views/PersonManage.vue'
 import CustomerManage from '../views/CustomerManage.vue'
 import BankCardManage from '../views/BankCardManage.vue'
 import TransferTask from '../views/TransferTask.vue'
-import HistoryTask from '../views/HistoryTask.vue'
 
 const routes = [
   {
@@ -31,11 +30,6 @@ const routes = [
     path: '/task',
     name: 'TransferTask',
     component: TransferTask
-  },
-  {
-    path: '/history',
-    name: 'HistoryTask',
-    component: HistoryTask
   }
 ]
 

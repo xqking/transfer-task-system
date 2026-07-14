@@ -14,7 +14,6 @@
         <el-menu-item index="/customer">客户管理</el-menu-item>
         <el-menu-item index="/bankcard">银行卡管理</el-menu-item>
         <el-menu-item index="/task">转账任务</el-menu-item>
-        <el-menu-item index="/history">历史任务</el-menu-item>
       </el-menu>
     </el-header>
     <el-main class="main-content">

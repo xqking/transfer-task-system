@@ -1,262 +1,394 @@
 <template>
   <div class="home-container">
-    <el-card class="stats-card">
+    <div class="stats-row">
+      <el-card class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon total-icon">
+            <el-icon><DataAnalysis /></el-icon>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ totalTasks }}</span>
+            <span class="stat-label">总任务数</span>
+          </div>
+        </div>
+      </el-card>
+      <el-card class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon completed-icon">
+            <el-icon><CircleCheck /></el-icon>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ completedTasks }}</span>
+            <span class="stat-label">已完成</span>
+          </div>
+        </div>
+      </el-card>
+      <el-card class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon pending-icon">
+            <el-icon><Clock /></el-icon>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ pendingTasks }}</span>
+            <span class="stat-label">待执行</span>
+          </div>
+        </div>
+      </el-card>
+      <el-card class="stat-card">
+        <div class="stat-content">
+          <div class="stat-icon failed-icon">
+            <el-icon><CircleClose /></el-icon>
+          </div>
+          <div class="stat-info">
+            <span class="stat-value">{{ failedTasks }}</span>
+            <span class="stat-label">失败</span>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <el-card class="main-card">
       <template #header>
         <div class="card-header">
-          <span>任务概览</span>
-          <div>
-            <el-button type="success" @click="exportExcel" :icon="Document">导出Excel</el-button>
+          <span class="card-title">任务列表</span>
+          <div class="header-actions">
             <el-button type="warning" @click="exportImage" :icon="Document">导出图片</el-button>
-            <el-button type="danger" @click="exportPDF" :icon="Document">导出PDF</el-button>
             <el-button type="primary" @click="refreshData" :icon="Refresh">刷新</el-button>
           </div>
         </div>
       </template>
 
       <div class="filter-bar">
-        <span class="filter-label">选择客户：</span>
-        <el-select
-          v-model="selectedCustomerId"
-          clearable
-          placeholder="全部客户"
-          style="width: 180px;"
-          @change="loadCalendarData"
-        >
-          <el-option
-            v-for="c in customerList"
-            :key="c.id"
-            :label="c.name"
-            :value="c.id"
+        <div class="filter-group">
+          <span class="filter-label">客户：</span>
+          <el-select
+            v-model="selectedCustomerId"
+            clearable
+            placeholder="全部客户"
+            style="width: 160px;"
+            @change="loadCalendarData"
           >
-            <span class="customer-option">
-              <i class="option-dot" :style="{ backgroundColor: c.color }" />
-              {{ c.name }}
-            </span>
-          </el-option>
-        </el-select>
+            <el-option
+              v-for="c in customerList"
+              :key="c.id"
+              :label="c.name"
+              :value="c.id"
+            >
+              <span class="customer-option">
+                <i class="option-dot" :style="{ backgroundColor: c.color }" />
+                {{ c.name }}
+              </span>
+            </el-option>
+          </el-select>
+        </div>
 
-        <span class="filter-label">选择人员：</span>
-        <el-select
-          v-model="selectedPersonId"
-          clearable
-          placeholder="全部人员"
-          style="width: 180px;"
-          @change="loadCalendarData"
-        >
-          <el-option
-            v-for="p in personList"
-            :key="p.id"
-            :label="`${p.code} - ${p.name}`"
-            :value="p.id"
+        <div class="filter-group">
+          <span class="filter-label">人员：</span>
+          <el-select
+            v-model="selectedPersonId"
+            clearable
+            placeholder="全部人员"
+            style="width: 160px;"
+            @change="loadCalendarData"
+          >
+            <el-option
+              v-for="p in personList"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">银行：</span>
+          <el-select
+            v-model="selectedBankId"
+            clearable
+            placeholder="全部银行"
+            style="width: 140px;"
+            @change="loadCalendarData"
+          >
+            <el-option
+              v-for="b in bankList"
+              :key="b.id"
+              :label="b.name"
+              :value="b.id"
+            />
+          </el-select>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">状态：</span>
+          <el-select
+            v-model="selectedStatus"
+            clearable
+            placeholder="全部状态"
+            style="width: 120px;"
+            @change="loadCalendarData"
+          >
+            <el-option label="已完成" value="completed" />
+            <el-option label="待执行" value="pending" />
+            <el-option label="失败" value="failed" />
+          </el-select>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">日期范围：</span>
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            @change="loadCalendarData"
           />
-        </el-select>
-
-        <span class="filter-label">选择日期范围：</span>
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          format="YYYY-MM-DD"
-          value-format="YYYY-MM-DD"
-          @change="loadCalendarData"
-        />
-      </div>
-
-      <div class="task-legend">
-        <span class="legend-item">
-          <i class="legend-dot legend-completed" />
-          已完成
-        </span>
-        <span class="legend-item">
-          <i class="legend-dot legend-pending" />
-          待执行
-        </span>
-        <span class="legend-item">
-          <i class="legend-dot legend-failed" />
-          失败
-        </span>
-      </div>
-
-      <div v-if="personList.length === 0" class="empty-tip">
-        暂无数据
-      </div>
-
-      <div v-if="selectedPersonId" class="person-card-view">
-        <div class="person-header-card">
-          <span class="person-title">{{ getSelectedPersonInfo() }}</span>
-          <span class="task-count-badge">共 {{ getSelectedPersonTasks().length }} 个任务</span>
         </div>
-        
-        <div v-if="getSelectedPersonTasks().length === 0" class="empty-tip">
-          该人员暂无任务
+      </div>
+
+      <div class="action-bar">
+        <span class="selected-count">已选择 {{ selectedRows.length }} 条</span>
+        <el-button type="primary" @click="showAddTaskDialog" :icon="Plus">新建任务</el-button>
+        <el-button type="success" @click="batchUpdateStatus('completed')" :disabled="selectedRows.length === 0">批量已完成</el-button>
+        <el-button type="warning" @click="batchUpdateStatus('pending')" :disabled="selectedRows.length === 0">批量待完成</el-button>
+        <el-button type="danger" @click="batchUpdateStatus('failed')" :disabled="selectedRows.length === 0">批量失败</el-button>
+        <el-button type="default" @click="batchDelete" :disabled="selectedRows.length === 0" :icon="Delete">批量删除</el-button>
+        <el-button type="success" @click="exportExcel" :icon="Document">导出Excel</el-button>
+      </div>
+
+      <el-table
+        :data="taskTableData"
+        stripe
+        border
+        style="width: 100%;"
+        row-key="id"
+        :expand-row-keys="expandedRowKeys"
+        @expand-change="handleExpandChange"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="50" />
+
+
+        <el-table-column prop="person_name" label="人员" width="120" />
+        <el-table-column prop="customer_name" label="客户" width="100">
+          <template #default="{ row }">
+            <span class="customer-tag" :style="{ color: getCustomerColor(row.customer_name) }">
+              {{ row.customer_name }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="bank_name" label="银行" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getBankTagType(row.bank_name)" size="small">
+              {{ row.bank_name.replace('银行', '') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="task_date" label="任务日期" width="120" />
+        <el-table-column prop="amount" label="总金额" width="120">
+          <template #default="{ row }">
+            <span class="amount-text">¥{{ Math.round(row.amount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="微信" width="100">
+          <template #default="{ row }">
+            <span class="wechat-amount">¥{{ ((row.wechat_amount || 0) + (row.alipay_amount || 0) > 0 && (row.wechat_amount || 0) + (row.alipay_amount || 0) === Math.round(row.amount)) ? (row.wechat_amount || 0) : getSplitAmount(row, 1) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="支付宝" width="100">
+          <template #default="{ row }">
+            <span class="alipay-amount">¥{{ ((row.wechat_amount || 0) + (row.alipay_amount || 0) > 0 && (row.wechat_amount || 0) + (row.alipay_amount || 0) === Math.round(row.amount)) ? (row.alipay_amount || 0) : (Math.round(row.amount) - getSplitAmount(row, 1)) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)" size="small">
+              {{ getStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" width="150">
+          <template #default="{ row }">
+            <span class="remark-text">{{ row.remark || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEditDialog(row)" :icon="Edit">编辑</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <div id="export-cards" class="export-cards-container" style="display: none;">
+      <template v-for="(personTasks, personCode) in groupedTasks" :key="personCode">
+        <div class="person-header">
+          <span class="person-title">{{ personCode }} - {{ getPersonName(personCode) }}</span>
+          <span class="task-count">共 {{ personTasks.length }} 个任务</span>
         </div>
-        
-        <div class="task-cards">
+        <div class="cards-grid">
           <div 
-            v-for="(task, index) in getSelectedPersonTasks()" 
+            v-for="task in personTasks" 
             :key="task.id" 
-            class="task-card-item"
-            :style="getTaskCardStyle(task)"
+            class="task-card"
+            :class="getBankCardClass(task.bank_name)"
           >
-            <div class="task-card-main">
-              <div class="task-card-left">
-                <div class="qr-code-container" v-if="getQRCode(task)">
-                  <img 
-                    :src="getQRCodeUrl(getQRCode(task))" 
-                    alt="收款码" 
-                    class="qr-code-image"
-                    @click="previewQRCode(getQRCode(task))"
-                  />
-                </div>
-                <div class="no-qr-code" v-else>
-                  暂无收款码
-                </div>
+            <div class="card-left">
+              <div class="qr-container" v-if="getQRCode(task)">
+                <img :src="getQRCodeUrl(getQRCode(task))" alt="收款码" class="qr-code" />
               </div>
-              <div class="task-card-right">
-                <div class="detail-row">
-                  <span class="detail-label">客户：</span>
-                  <span class="detail-value" :style="{ color: getCustomerColor(task.customer_name) }">{{ task.customer_name }}</span>
+              <div class="qr-placeholder" v-else>
+                <span>暂无收款码</span>
+              </div>
+            </div>
+            <div class="card-right">
+              <div class="card-info">
+                <div class="info-row">
+                  <span class="info-label">客户：</span>
+                  <span class="info-value customer-value" :style="{ color: getCustomerColor(task.customer_name) }">{{ task.customer_name }}</span>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">银行：</span>
-                  <span class="detail-value">{{ task.bank_name.replace('银行', '') }}</span>
+                <div class="info-row">
+                  <span class="info-label">银行：</span>
+                  <span class="info-value">{{ task.bank_name.replace('银行', '') }}</span>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">微信：</span>
-                  <span class="detail-value green-text">{{ getSplitAmount(task, 1) }}</span>
+                <div class="info-row">
+                  <span class="info-label">微信：</span>
+                  <span class="info-value wechat-value">¥{{ ((task.wechat_amount || 0) + (task.alipay_amount || 0) > 0 && (task.wechat_amount || 0) + (task.alipay_amount || 0) === Math.round(task.amount)) ? (task.wechat_amount || 0) : getSplitAmount(task, 1) }}</span>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">支付宝：</span>
-                  <span class="detail-value blue-text">{{ Math.round(task.amount) - getSplitAmount(task, 1) }}</span>
+                <div class="info-row">
+                  <span class="info-label">支付宝：</span>
+                  <span class="info-value alipay-value">¥{{ ((task.wechat_amount || 0) + (task.alipay_amount || 0) > 0 && (task.wechat_amount || 0) + (task.alipay_amount || 0) === Math.round(task.amount)) ? (task.alipay_amount || 0) : (Math.round(task.amount) - getSplitAmount(task, 1)) }}</span>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">日期：</span>
-                  <span class="detail-value">{{ formatTaskDate(task.task_date) }}</span>
+                <div class="info-row">
+                  <span class="info-label">日期：</span>
+                  <span class="info-value">{{ task.task_date }}</span>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">状态：</span>
-                  <span :class="['detail-value', 'status-text', task.status === 'completed' ? 'status-completed' : task.status === 'failed' ? 'status-failed' : 'status-pending']">
-                    {{ task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : '待执行' }}
-                  </span>
+                <div class="info-row">
+                  <span class="info-label">状态：</span>
+                  <span class="info-value status-tag" :class="getStatusClass(task.status)">{{ getStatusText(task.status) }}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        
-        <div v-if="getSelectedPersonTasks().length > 0" class="total-summary">
+        <div class="summary-row">
           <div class="summary-item">
             <span class="summary-label">微信合计：</span>
-            <span class="summary-value green">¥{{ getWechatTotal() }}</span>
+            <span class="summary-value wechat-summary">¥{{ getPersonWechatTotal(personTasks) }}</span>
           </div>
           <div class="summary-item">
             <span class="summary-label">支付宝合计：</span>
-            <span class="summary-value blue">¥{{ getAlipayTotal() }}</span>
+            <span class="summary-value alipay-summary">¥{{ getPersonAlipayTotal(personTasks) }}</span>
           </div>
-          <div class="summary-item">
+          <div class="summary-item total">
             <span class="summary-label">总计：</span>
-            <span class="summary-value total">¥{{ getTotalAmount() }}</span>
+            <span class="summary-value total-summary">¥{{ getPersonTotal(personTasks) }}</span>
           </div>
         </div>
-      </div>
+      </template>
+    </div>
 
-      <div v-else class="person-groups">
-        <div
-          v-for="person in personList"
-          :key="person.id"
-          class="person-card"
-        >
-          <div class="person-header">
-            <span class="person-code">{{ person.code }} - {{ person.name }}</span>
-            <span class="task-count">共 {{ getPersonTasks(person.code).length }} 个任务</span>
-          </div>
-          
-          <div class="person-tasks">
-            <div
-              v-for="task in getPersonTasks(person.code)"
-              :key="task.id"
-              class="task-card"
-              :class="getTaskStatusClass(task.status)"
-              :style="getTaskStyle(task)"
-              @click="showTaskDetail(task)"
-            >
-              <div class="task-content">
-                <div class="task-info">
-                  <span class="customer-name" :style="{ color: getCustomerColor(task.customer_name) }">{{ task.customer_name }}</span>
-                  <span class="bank" :class="getBankBadgeClass(task.bank_name)">{{ task.bank_name }}</span>
-                </div>
-                <div class="amount-boxes">
-                  <span class="amount-box green-box">¥{{ getSplitAmount(task, 1) }}</span>
-                  <span class="amount-box blue-box">¥{{ getSplitAmount(task, 2) }}</span>
-                </div>
-              </div>
-              <div class="task-footer">
-                <span class="task-date">{{ formatTaskDate(task.task_date) }}</span>
-                <span class="task-status" :style="{ background: getTaskStatusBg(task.status), color: getTaskStatusColor(task.status) }">
-                  {{ getStatusText(task.status) }}
-                </span>
-              </div>
-            </div>
-            
-            <div v-if="getPersonTasks(person.code).length === 0" class="no-task">
-              暂无任务
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-card>
-
-    <el-dialog v-model="detailVisible" title="任务详情" width="500px">
-      <el-descriptions :column="1" border v-if="selectedTask">
-        <el-descriptions-item label="人员">{{ selectedTask.person_code || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="金额">¥{{ Math.round(selectedTask.amount || 0) }}</el-descriptions-item>
-        <el-descriptions-item label="客户">
-          <span
-            v-if="selectedTask.customer_name"
-            class="customer-tag"
-            :style="{ color: selectedTask.customer_color, borderColor: selectedTask.customer_color }"
-          >
-            {{ selectedTask.customer_name }}
-          </span>
-          <span v-else>-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="银行">{{ selectedTask.bank_name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="任务日期">{{ formatTaskDate(selectedTask.task_date) }}</el-descriptions-item>
-        <el-descriptions-item label="收款码">
-          <div v-if="getQRCode(selectedTask)" class="qr-preview">
-            <img 
-              :src="getQRCodeUrl(getQRCode(selectedTask))" 
-              alt="收款码" 
-              class="qr-large"
-            />
-          </div>
-          <span v-else>-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="getStatusType(selectedTask.status)">{{ getStatusText(selectedTask.status) }}</el-tag>
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-dialog>
-
-    <!-- 收款码预览弹窗 -->
     <el-dialog v-model="qrPreviewVisible" title="收款码" width="400px">
       <div class="qr-preview-container">
         <img :src="previewQRUrl" alt="收款码" class="qr-preview-image" />
       </div>
     </el-dialog>
+
+    <el-dialog v-model="editDialogVisible" title="编辑任务" width="500px">
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="人员">
+          <el-select v-model="editForm.person_id" style="width: 100%;">
+            <el-option v-for="p in personList" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="客户">
+          <el-select v-model="editForm.customer_id" style="width: 100%;">
+            <el-option v-for="c in customerList" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="银行">
+          <el-select v-model="editForm.bank_id" style="width: 100%;">
+            <el-option v-for="b in bankList" :key="b.id" :label="b.name" :value="b.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="总金额">
+          <el-input :model-value="editForm.wechat_amount + editForm.alipay_amount" disabled style="width: 100%; text-align: center;" />
+        </el-form-item>
+        <el-form-item label="微信金额">
+          <el-input-number v-model="editForm.wechat_amount" :min="0" controls-position="right" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="支付宝金额">
+          <el-input-number v-model="editForm.alipay_amount" :min="0" controls-position="right" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="任务日期">
+          <el-date-picker v-model="editForm.task_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="editForm.status" style="width: 100%;">
+            <el-option label="待执行" value="pending" />
+            <el-option label="已完成" value="completed" />
+            <el-option label="失败" value="failed" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="editForm.remark" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="addTaskDialogVisible" title="新建任务" width="500px">
+      <el-form :model="addTaskForm" label-width="100px">
+        <el-form-item label="人员">
+          <el-select v-model="addTaskForm.person_id" style="width: 100%;">
+            <el-option v-for="p in personList" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="客户">
+          <el-select v-model="addTaskForm.customer_id" style="width: 100%;">
+            <el-option v-for="c in customerList" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="银行">
+          <el-select v-model="addTaskForm.bank_id" style="width: 100%;">
+            <el-option v-for="b in bankList" :key="b.id" :label="b.name" :value="b.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="总金额">
+          <el-input :model-value="addTaskForm.wechat_amount + addTaskForm.alipay_amount" disabled style="width: 100%; text-align: center;" />
+        </el-form-item>
+        <el-form-item label="微信金额">
+          <el-input-number v-model="addTaskForm.wechat_amount" :min="0" controls-position="right" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="支付宝金额">
+          <el-input-number v-model="addTaskForm.alipay_amount" :min="0" controls-position="right" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="任务日期">
+          <el-date-picker v-model="addTaskForm.task_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="addTaskForm.remark" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addTaskDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveAddTask">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { Refresh, Document } from '@element-plus/icons-vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { Refresh, Document, DataAnalysis, CircleCheck, Clock, CircleClose, Delete, Edit, Plus } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
-import * as XLSX from 'xlsx'
 
 const dateRange = ref([])
 const dates = ref([])
@@ -265,11 +397,44 @@ const customerList = ref([])
 const cardList = ref([])
 const selectedCustomerId = ref(null)
 const selectedPersonId = ref(null)
+const selectedBankId = ref(null)
+const selectedStatus = ref(null)
 const calendarData = ref({})
-const detailVisible = ref(false)
-const selectedTask = ref(null)
+const expandedRowKeys = ref([])
 const qrPreviewVisible = ref(false)
 const previewQRUrl = ref('')
+const selectedRows = ref([])
+const editDialogVisible = ref(false)
+const editingRow = ref(null)
+const editForm = ref({
+  id: null,
+  amount: 0,
+  wechat_amount: 0,
+  alipay_amount: 0,
+  status: 'pending',
+  remark: ''
+})
+
+watch(() => editForm.value.wechat_amount, () => {})
+
+watch(() => editForm.value.alipay_amount, () => {})
+
+const addTaskDialogVisible = ref(false)
+const bankList = ref([])
+const addTaskForm = ref({
+  person_id: null,
+  customer_id: null,
+  bank_id: null,
+  amount: 0,
+  wechat_amount: 0,
+  alipay_amount: 0,
+  task_date: '',
+  remark: ''
+})
+
+watch(() => addTaskForm.value.wechat_amount, () => {})
+
+watch(() => addTaskForm.value.alipay_amount, () => {})
 
 const today = new Date()
 const weekLater = new Date(today.getTime() + 6 * 24 * 60 * 60 * 1000)
@@ -278,124 +443,40 @@ dateRange.value = [
   weekLater.toISOString().split('T')[0]
 ]
 
-function buildGanttRows() {
-  return personList.value
-    .map((person) => {
-      const dateTasks = {}
-      dates.value.forEach((date) => {
-        const personData = calendarData.value[person.code]
-        dateTasks[date] = personData?.tasks?.[date] || []
-      })
-      return { code: person.code, dateTasks }
-    })
-}
-
-function getPersonTasks(personCode) {
-  const personData = calendarData.value[personCode]
-  if (!personData?.tasks) return []
-  
+const taskTableData = computed(() => {
   const tasks = []
-  Object.keys(personData.tasks).forEach(date => {
-    tasks.push(...personData.tasks[date])
-  })
-  
-  return tasks.sort((a, b) => new Date(a.task_date) - new Date(b.task_date))
-}
-
-function getPersonNameByCode(personCode) {
-  const person = personList.value.find(p => p.code === personCode)
-  return person ? person.name : personCode || '-'
-}
-
-function getSelectedPersonInfo() {
-  const person = personList.value.find(p => p.id === selectedPersonId.value)
-  return person ? `${person.code} - ${person.name}` : '-'
-}
-
-function getTaskCardStyle(task) {
-  if (task.status === 'completed') {
-    return {
-      background: '#f0f9eb',
-      borderColor: '#67c23a',
-      borderWidth: '2px',
-      borderStyle: 'solid'
-    }
-  }
-  if (task.status === 'failed') {
-    return {
-      background: '#fef0f0',
-      borderColor: '#f56c6c',
-      borderWidth: '2px',
-      borderStyle: 'solid'
-    }
-  }
-  return {
-    background: '#fff7e6',
-    borderColor: '#e6a23c',
-    borderWidth: '2px',
-    borderStyle: 'solid'
-  }
-}
-
-function getWechatTotal() {
-  return getSelectedPersonTasks().reduce((sum, task) => sum + getSplitAmount(task, 1), 0)
-}
-
-function getAlipayTotal() {
-  return getSelectedPersonTasks().reduce((sum, task) => sum + (Math.round(task.amount) - getSplitAmount(task, 1)), 0)
-}
-
-function getTotalAmount() {
-  return getSelectedPersonTasks().reduce((sum, task) => sum + Math.round(task.amount), 0)
-}
-
-function getSelectedPersonTasks() {
-  const tasks = []
-  Object.keys(calendarData.value).forEach(personCode => {
-    const personData = calendarData.value[personCode]
+  Object.keys(calendarData.value).forEach(personId => {
+    const personData = calendarData.value[personId]
     if (personData?.tasks) {
       Object.keys(personData.tasks).forEach(date => {
         personData.tasks[date].forEach(task => {
-          const total = Math.round(task.amount)
-          const wechat = getSplitAmount(task, 1)
-          const tasksWithAmount = {
+          const person = personList.value.find(p => p.id == personId)
+          const taskData = {
             ...task,
-            wechat_amount: wechat,
-            alipay_amount: total - wechat
+            person_name: person ? person.name : task.person_name,
+            person_id: personId
           }
-          tasks.push(tasksWithAmount)
+          tasks.push(taskData)
         })
       })
     }
   })
-  return tasks.sort((a, b) => new Date(a.task_date) - new Date(b.task_date))
-}
 
-const personTasksWithTotal = computed(() => {
-  const tasks = getSelectedPersonTasks()
-  
-  if (tasks.length === 0) {
-    return []
+  if (selectedStatus.value) {
+    return tasks.filter(t => t.status === selectedStatus.value)
   }
-  
-  const wechatTotal = tasks.reduce((sum, row) => sum + (row.wechat_amount || 0), 0)
-  const alipayTotal = tasks.reduce((sum, row) => sum + (row.alipay_amount || 0), 0)
-  const amountTotal = tasks.reduce((sum, row) => sum + (row.amount || 0), 0)
-  
-  const totalRow = {
-    customer_name: '合计',
-    task_date: '',
-    bank_name: '',
-    wechat_amount: Math.round(wechatTotal),
-    alipay_amount: Math.round(alipayTotal),
-    amount: Math.round(amountTotal),
-    status: '',
-    isTotal: true,
-    id: 'total-row'
-  }
-  
-  return [...tasks, totalRow]
+
+  return tasks.sort((a, b) => new Date(b.task_date) - new Date(a.task_date))
 })
+
+const totalTasks = computed(() => taskTableData.value.length)
+const completedTasks = computed(() => taskTableData.value.filter(t => t.status === 'completed').length)
+const pendingTasks = computed(() => taskTableData.value.filter(t => t.status === 'pending').length)
+const failedTasks = computed(() => taskTableData.value.filter(t => t.status === 'failed').length)
+
+function handleExpandChange(row, expandedRows) {
+  expandedRowKeys.value = expandedRows.map(r => r.id)
+}
 
 function formatTaskDate(dateStr) {
   if (!dateStr) return '-'
@@ -457,27 +538,12 @@ function getSplitAmount(task, part) {
   return splitCache[key][part - 1]
 }
 
-function formatDateTime(dateStr) {
-  if (!dateStr) return '-'
-  try {
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return '-'
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    return `${year}-${month}-${day} ${hours}:${minutes}`
-  } catch (e) {
-    return '-'
-  }
-}
-
 onMounted(() => {
   generateDates()
   loadPersonList()
   loadCustomerList()
   loadCardList()
+  loadBankList()
   loadCalendarData()
 })
 
@@ -521,6 +587,58 @@ async function loadCardList() {
   }
 }
 
+async function loadBankList() {
+  try {
+    const res = await axios.get('/api/customer/banks')
+    bankList.value = res.data.data || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+function showAddTaskDialog() {
+  addTaskForm.value = {
+    person_id: null,
+    customer_id: null,
+    bank_id: null,
+    amount: 0,
+    wechat_amount: 0,
+    alipay_amount: 0,
+    task_date: new Date().toISOString().split('T')[0],
+    remark: ''
+  }
+  addTaskDialogVisible.value = true
+}
+
+async function saveAddTask() {
+  if (!addTaskForm.value.person_id) {
+    ElMessage.warning('请选择人员')
+    return
+  }
+  if (!addTaskForm.value.customer_id || !addTaskForm.value.bank_id) {
+    ElMessage.warning('请选择客户和银行')
+    return
+  }
+  const totalAmount = addTaskForm.value.wechat_amount + addTaskForm.value.alipay_amount
+  if (!totalAmount || totalAmount <= 0) {
+    ElMessage.warning('请输入有效的金额')
+    return
+  }
+
+  try {
+    await axios.post('/api/task-detail/create', {
+      ...addTaskForm.value,
+      amount: totalAmount
+    })
+    ElMessage.success('任务添加成功')
+    addTaskDialogVisible.value = false
+    loadCalendarData()
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('添加失败')
+  }
+}
+
 async function loadCalendarData() {
   generateDates()
   if (dateRange.value && dateRange.value.length === 2) {
@@ -535,6 +653,9 @@ async function loadCalendarData() {
       if (selectedPersonId.value) {
         payload.person_id = selectedPersonId.value
       }
+      if (selectedBankId.value) {
+        payload.bank_id = selectedBankId.value
+      }
       const res = await axios.post('/api/task-detail/calendar', payload)
       calendarData.value = res.data.data?.persons || {}
     } catch (e) {
@@ -543,25 +664,11 @@ async function loadCalendarData() {
   }
 }
 
-function formatDate(dateStr) {
-  const date = new Date(dateStr)
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
-}
-
-function showTaskDetail(task) {
-  selectedTask.value = task
-  detailVisible.value = true
-}
-
 function getQRCode(task) {
   const card = cardList.value.find(
     c => c.customer_name === task.customer_name && c.bank_name === task.bank_name
   )
   return card?.receive_code || null
-}
-
-function isQRCodeImage(code) {
-  return code && (code.startsWith('/uploads/') || code.startsWith('http') || code.match(/\.(jpg|jpeg|png|gif|webp)$/i))
 }
 
 function getQRCodeUrl(code) {
@@ -577,55 +684,16 @@ function previewQRCode(code) {
   qrPreviewVisible.value = true
 }
 
-function hexToRgb(hex) {
-  const h = (hex || '#409EFF').replace('#', '')
-  if (h.length !== 6) return { r: 64, g: 158, b: 255 }
-  return {
-    r: parseInt(h.slice(0, 2), 16),
-    g: parseInt(h.slice(2, 4), 16),
-    b: parseInt(h.slice(4, 6), 16)
-  }
+function getCustomerColor(customerName) {
+  const customer = customerList.value.find(c => c.name === customerName)
+  return customer ? customer.color : '#606266'
 }
 
-function getTaskStyle(task) {
-  if (task.status === 'completed') {
-    return {
-      background: '#f0f9eb',
-      borderColor: '#67c23a',
-      borderWidth: '2px',
-      borderStyle: 'solid'
-    }
-  }
-  if (task.status === 'failed') {
-    return {
-      background: '#fef0f0',
-      borderColor: '#f56c6c',
-      borderWidth: '2px',
-      borderStyle: 'solid'
-    }
-  }
-  return {
-    background: '#fff7e6',
-    borderColor: '#e6a23c',
-    borderWidth: '2px',
-    borderStyle: 'solid'
-  }
-}
-
-function getBankBadgeClass(bankName) {
-  if (!bankName) return ''
-  if (bankName.includes('工商银行')) return 'bank-icbc'
-  if (bankName.includes('建设银行')) return 'bank-ccb'
-  return ''
-}
-
-function getTaskStatusClass(status) {
-  const map = {
-    pending: 'status-pending',
-    completed: 'status-completed',
-    failed: 'status-failed'
-  }
-  return map[status] || 'status-pending'
+function getBankTagType(bankName) {
+  if (!bankName) return 'info'
+  if (bankName.includes('工商银行')) return 'danger'
+  if (bankName.includes('建设银行')) return 'success'
+  return 'info'
 }
 
 function getStatusType(status) {
@@ -646,66 +714,6 @@ function getStatusText(status) {
   return map[status] || status
 }
 
-function getTaskStatusColor(status) {
-  const map = {
-    pending: '#e6a23c',
-    completed: '#67c23a',
-    failed: '#f56c6c'
-  }
-  return map[status] || '#606266'
-}
-
-function getTaskStatusBg(status) {
-  const map = {
-    pending: '#fff7e6',
-    completed: '#e1f3d8',
-    failed: '#fde2e2'
-  }
-  return map[status] || '#f5f7fa'
-}
-
-function getCustomerColor(customerName) {
-  const customer = customerList.value.find(c => c.name === customerName)
-  return customer ? customer.color : '#606266'
-}
-
-function getSummary(param) {
-  const { columns, data } = param
-  const sums = []
-  
-  const wechatTotal = data.reduce((sum, row) => sum + (row.wechat_amount || 0), 0)
-  const alipayTotal = data.reduce((sum, row) => sum + (row.alipay_amount || 0), 0)
-  const amountTotal = data.reduce((sum, row) => sum + (row.amount || 0), 0)
-  
-  columns.forEach((column) => {
-    if (column.prop === 'customer_name') {
-      sums.push({
-        cellStyle: { textAlign: 'center', fontWeight: 'bold' },
-        value: '合计'
-      })
-    } else if (column.prop === 'wechat_amount') {
-      sums.push({
-        cellStyle: { textAlign: 'center', fontWeight: 'bold', color: '#67c23a' },
-        value: `¥${Math.round(wechatTotal)}`
-      })
-    } else if (column.prop === 'alipay_amount') {
-      sums.push({
-        cellStyle: { textAlign: 'center', fontWeight: 'bold', color: '#409eff' },
-        value: `¥${Math.round(alipayTotal)}`
-      })
-    } else if (column.prop === 'amount') {
-      sums.push({
-        cellStyle: { textAlign: 'center', fontWeight: 'bold' },
-        value: `¥${Math.round(amountTotal)}`
-      })
-    } else {
-      sums.push('')
-    }
-  })
-  
-  return [sums]
-}
-
 function refreshData() {
   loadPersonList()
   loadCustomerList()
@@ -714,183 +722,165 @@ function refreshData() {
   ElMessage.success('数据已刷新')
 }
 
-async function exportPDF() {
-  if (dates.value.length === 0 || Object.keys(calendarData.value).length === 0) {
-    ElMessage.warning('暂无数据可导出')
+function openEditDialog(row) {
+  editingRow.value = row
+  
+  let wechatAmount = row.wechat_amount !== undefined && row.wechat_amount !== null ? row.wechat_amount : 0
+  let alipayAmount = row.alipay_amount !== undefined && row.alipay_amount !== null ? row.alipay_amount : 0
+  
+  if (wechatAmount === 0 && alipayAmount === 0 && row.amount > 0) {
+    wechatAmount = getSplitAmount(row, 1)
+    alipayAmount = Math.round(row.amount) - wechatAmount
+  }
+  
+  const total = Math.round(row.amount)
+  if (wechatAmount + alipayAmount !== total) {
+    alipayAmount = total - wechatAmount
+  }
+  
+  editForm.value = {
+    id: row.id,
+    person_id: row.person_id,
+    customer_id: row.customer_id,
+    bank_id: row.bank_id,
+    amount: total,
+    wechat_amount: wechatAmount,
+    alipay_amount: alipayAmount,
+    task_date: row.task_date,
+    status: row.status,
+    remark: row.remark !== undefined && row.remark !== null ? row.remark : ''
+  }
+  editDialogVisible.value = true
+}
+
+async function saveEdit() {
+  if (!editForm.value.id) {
+    ElMessage.warning('无效的记录')
     return
   }
 
   try {
-    ElMessage.info('正在生成PDF，请稍候...')
-
-    let element = document.querySelector('.person-card-view')
-    if (!element) {
-      element = document.querySelector('.person-table-container')
-    }
-    if (!element) {
-      element = document.querySelector('.person-groups')
-    }
+    const totalAmount = editForm.value.wechat_amount + editForm.value.alipay_amount
+    const wechatAmount = editForm.value.wechat_amount || 0
+    const alipayAmount = editForm.value.alipay_amount || 0
     
-    if (!element) {
-      ElMessage.error('未找到可导出的内容')
-      return
-    }
-    
-    const canvas = await html2canvas(element, {
-      scale: selectedPersonId.value ? 3 : 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      width: element.scrollWidth,
-      height: element.scrollHeight,
-      windowWidth: element.scrollWidth,
-      windowHeight: element.scrollHeight
+    await axios.put(`/api/task-detail/update/${editForm.value.id}`, {
+      customer_id: editForm.value.customer_id,
+      bank_id: editForm.value.bank_id,
+      amount: totalAmount,
+      wechat_amount: wechatAmount,
+      alipay_amount: alipayAmount,
+      task_date: editForm.value.task_date,
+      status: editForm.value.status,
+      remark: editForm.value.remark
     })
-
-    const imgData = canvas.toDataURL('image/png')
-    
-    let pdfWidth, pdfHeight
-    if (selectedPersonId.value) {
-      pdfWidth = canvas.width * 0.75
-      pdfHeight = canvas.height * 0.75
-    } else {
-      pdfWidth = canvas.width * 0.5
-      pdfHeight = canvas.height * 0.5
-    }
-    
-    const pdf = new jsPDF({
-      orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [pdfWidth, pdfHeight]
-    })
-
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
-    
-    let fileName = ''
-    const datePart = dateRange.value[0] === dateRange.value[1] 
-      ? dateRange.value[0] 
-      : `${dateRange.value[0]}_${dateRange.value[1]}`
-    
-    if (selectedPersonId.value) {
-      const person = personList.value.find(p => p.id === selectedPersonId.value)
-      if (person) {
-        fileName = `${person.name}-${datePart}.pdf`
-      } else {
-        fileName = `${datePart}.pdf`
-      }
-    } else {
-      fileName = `${datePart}.pdf`
-    }
-    pdf.save(fileName)
-    
-    ElMessage.success('PDF导出成功')
-  } catch (error) {
-    console.error('PDF导出失败:', error)
-    ElMessage.error('PDF导出失败，请重试')
+    ElMessage.success('编辑成功')
+    editDialogVisible.value = false
+    loadCalendarData()
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('编辑失败')
   }
 }
 
-async function exportExcel() {
-  if (dates.value.length === 0 || Object.keys(calendarData.value).length === 0) {
-    ElMessage.warning('暂无数据可导出')
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
+
+async function batchUpdateStatus(status) {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要操作的记录')
     return
   }
 
+  const ids = selectedRows.value.map(r => r.id)
   try {
-    ElMessage.info('正在生成Excel，请稍候...')
-    
-    const tasks = []
-    Object.keys(calendarData.value).forEach(personCode => {
-      const personData = calendarData.value[personCode]
-      if (personData?.tasks) {
-        Object.keys(personData.tasks).forEach(date => {
-          personData.tasks[date].forEach(task => {
-            const total = Math.round(task.amount)
-            const wechat = getSplitAmount(task, 1)
-            const card = cardList.value.find(
-              c => c.customer_name === task.customer_name && c.bank_name === task.bank_name
-            )
-            tasks.push({
-              '人员': getPersonNameByCode(personCode),
-              '客户': task.customer_name || '',
-              '日期': formatTaskDate(task.task_date),
-              '银行': task.bank_name || '',
-              '微信金额': wechat,
-              '支付宝金额': total - wechat,
-              '总金额': total,
-              '收款码': card?.receive_code ? '已上传' : '未上传',
-              '状态': task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : '待执行'
-            })
-          })
-        })
-      }
-    })
-    
-    if (tasks.length === 0) {
-      ElMessage.warning('没有可导出的任务数据')
-      return
-    }
-    
-    tasks.sort((a, b) => new Date(a.日期) - new Date(b.日期))
-    
-    const wechatTotal = tasks.reduce((sum, t) => sum + t.微信金额, 0)
-    const alipayTotal = tasks.reduce((sum, t) => sum + t.支付宝金额, 0)
-    const amountTotal = tasks.reduce((sum, t) => sum + t.总金额, 0)
-    
-    tasks.push({
-      '人员': '合计',
-      '客户': '',
-      '日期': '',
-      '银行': '',
-      '微信金额': wechatTotal,
-      '支付宝金额': alipayTotal,
-      '总金额': amountTotal,
-      '收款码': '',
-      '状态': ''
-    })
-    
-    const ws = XLSX.utils.json_to_sheet(tasks)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '任务明细')
-    
-    ws['!cols'] = [
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 10 }
-    ]
-    
-    let fileName = ''
-    const datePart = dateRange.value[0] === dateRange.value[1] 
-      ? dateRange.value[0] 
-      : `${dateRange.value[0]}_${dateRange.value[1]}`
-    
-    if (selectedPersonId.value) {
-      const person = personList.value.find(p => p.id === selectedPersonId.value)
-      if (person) {
-        fileName = `${person.name}-${datePart}.xlsx`
-      } else {
-        fileName = `${datePart}.xlsx`
-      }
-    } else {
-      fileName = `${datePart}.xlsx`
-    }
-    
-    XLSX.writeFile(wb, fileName)
-    ElMessage.success('Excel导出成功')
-  } catch (error) {
-    console.error('Excel导出失败:', error)
-    ElMessage.error('Excel导出失败，请重试')
+    await axios.put('/api/task-detail/batch-update-status', { ids, status })
+    ElMessage.success(`批量${getStatusText(status)}成功`)
+    loadCalendarData()
+    selectedRows.value = []
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('批量操作失败')
   }
+}
+
+async function batchDelete() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要删除的记录')
+    return
+  }
+
+  const ids = selectedRows.value.map(r => r.id)
+  try {
+    await axios.delete('/api/task-detail/batch-delete', { data: { ids } })
+    ElMessage.success('批量删除成功')
+    loadCalendarData()
+    selectedRows.value = []
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('批量删除失败')
+  }
+}
+
+const groupedTasks = computed(() => {
+  const groups = {}
+  taskTableData.value.forEach(task => {
+    const key = task.person_id || task.person_name
+    if (!groups[key]) {
+      groups[key] = []
+    }
+    groups[key].push(task)
+  })
+  return groups
+})
+
+function getPersonName(personIdOrName) {
+  const person = personList.value.find(p => p.id == personIdOrName)
+  return person ? person.name : personIdOrName
+}
+
+function getBankCardClass(bankName) {
+  if (bankName?.includes('工商银行')) return 'bank-icbc'
+  if (bankName?.includes('建设银行')) return 'bank-ccb'
+  return 'bank-default'
+}
+
+function getBankHeaderClass(bankName) {
+  if (bankName?.includes('工商银行')) return 'header-icbc'
+  if (bankName?.includes('建设银行')) return 'header-ccb'
+  return 'header-default'
+}
+
+function getBankLogo(bankName) {
+  if (bankName?.includes('工商银行')) return 'ICBC'
+  if (bankName?.includes('建设银行')) return 'CCB'
+  return 'BANK'
+}
+
+function getStatusClass(status) {
+  const map = {
+    pending: 'status-pending',
+    completed: 'status-completed',
+    failed: 'status-failed'
+  }
+  return map[status] || 'status-default'
+}
+
+function getPersonWechatTotal(tasks) {
+  return tasks.reduce((sum, t) => sum + getSplitAmount(t, 1), 0)
+}
+
+function getPersonAlipayTotal(tasks) {
+  return tasks.reduce((sum, t) => sum + (Math.round(t.amount) - getSplitAmount(t, 1)), 0)
+}
+
+function getPersonTotal(tasks) {
+  return tasks.reduce((sum, t) => sum + Math.round(t.amount), 0)
 }
 
 async function exportImage() {
-  if (dates.value.length === 0 || Object.keys(calendarData.value).length === 0) {
+  if (taskTableData.value.length === 0) {
     ElMessage.warning('暂无数据可导出')
     return
   }
@@ -898,50 +888,49 @@ async function exportImage() {
   try {
     ElMessage.info('正在生成图片，请稍候...')
 
-    let element = document.querySelector('.person-card-view')
-    if (!element) {
-      element = document.querySelector('.person-table-container')
-    }
-    if (!element) {
-      element = document.querySelector('.person-groups')
-    }
-    
-    if (!element) {
+    const exportContainer = document.getElementById('export-cards')
+    if (!exportContainer) {
       ElMessage.error('未找到可导出的内容')
       return
     }
+
+    exportContainer.style.display = 'block'
+    exportContainer.style.position = 'fixed'
+    exportContainer.style.top = '-9999px'
+    exportContainer.style.left = '-9999px'
+    exportContainer.style.width = '600px'
     
-    const canvas = await html2canvas(element, {
-      scale: 3,
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    const canvas = await html2canvas(exportContainer, {
+      scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
-      width: element.scrollWidth,
-      height: element.scrollHeight,
-      windowWidth: element.scrollWidth,
-      windowHeight: element.scrollHeight
+      width: 600
     })
+
+    exportContainer.style.display = 'none'
+    exportContainer.style.position = ''
+    exportContainer.style.top = ''
+    exportContainer.style.left = ''
+    exportContainer.style.width = ''
 
     const imgData = canvas.toDataURL('image/png')
     
     const link = document.createElement('a')
     link.href = imgData
     
+    const personIds = Object.keys(groupedTasks.value)
+    const firstPersonId = personIds[0] || ''
+    const personName = getPersonName(firstPersonId)
+    
     let fileName = ''
     const datePart = dateRange.value[0] === dateRange.value[1] 
       ? dateRange.value[0] 
       : `${dateRange.value[0]}_${dateRange.value[1]}`
     
-    if (selectedPersonId.value) {
-      const person = personList.value.find(p => p.id === selectedPersonId.value)
-      if (person) {
-        fileName = `${person.name}-${datePart}.png`
-      } else {
-        fileName = `${datePart}.png`
-      }
-    } else {
-      fileName = `${datePart}.png`
-    }
+    fileName = `${personName}_${datePart}.png`
     
     link.download = fileName
     document.body.appendChild(link)
@@ -954,17 +943,127 @@ async function exportImage() {
     ElMessage.error('图片导出失败，请重试')
   }
 }
+
+import * as XLSX from 'xlsx'
+
+function exportExcel() {
+  if (taskTableData.value.length === 0) {
+    ElMessage.warning('没有数据可导出')
+    return
+  }
+
+  const data = taskTableData.value.map(row => ({
+    '人员': getPersonName(row.person_id || row.person_name),
+    '客户': row.customer_name || '-',
+    '银行': row.bank_name || '-',
+    '任务日期': row.task_date || '-',
+    '总金额': row.amount || 0,
+    '微信': ((row.wechat_amount || 0) + (row.alipay_amount || 0) > 0 && (row.wechat_amount || 0) + (row.alipay_amount || 0) === Math.round(row.amount)) ? (row.wechat_amount || 0) : getSplitAmount(row, 1),
+    '支付宝': ((row.wechat_amount || 0) + (row.alipay_amount || 0) > 0 && (row.wechat_amount || 0) + (row.alipay_amount || 0) === Math.round(row.amount)) ? (row.alipay_amount || 0) : (Math.round(row.amount) - getSplitAmount(row, 1)),
+    '状态': row.status === 'pending' ? '待执行' : row.status === 'completed' ? '已完成' : row.status === 'failed' ? '失败' : row.status,
+    '备注': row.remark || '-'
+  }))
+
+  const worksheet = XLSX.utils.json_to_sheet(data)
+  
+  const wscols = [
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 20 }
+  ]
+  worksheet['!cols'] = wscols
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, '任务数据')
+
+  const today = new Date()
+  const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
+  
+  XLSX.writeFile(workbook, `任务数据_${dateStr}.xlsx`)
+  
+  ElMessage.success('Excel导出成功')
+}
 </script>
 
 <style scoped>
 .home-container {
-  max-width: 1800px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 20px;
 }
 
-.stats-card {
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
   margin-bottom: 20px;
+}
+
+.stat-card {
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.total-icon {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.completed-icon {
+  background: linear-gradient(135deg, #67c23a 0%, #52c41a 100%);
+  color: #fff;
+}
+
+.pending-icon {
+  background: linear-gradient(135deg, #e6a23c 0%, #d4942f 100%);
+  color: #fff;
+}
+
+.failed-icon {
+  background: linear-gradient(135deg, #f56c6c 0%, #e85d5d 100%);
+  color: #fff;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.main-card {
+  border-radius: 12px;
 }
 
 .card-header {
@@ -973,31 +1072,67 @@ async function exportImage() {
   align-items: center;
 }
 
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .filter-bar {
-  margin-bottom: 16px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px 20px;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .filter-label {
-  color: #606266;
   font-size: 14px;
+  color: #606266;
   white-space: nowrap;
+}
+
+.action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+}
+
+.selected-count {
+  font-size: 14px;
+  color: #606266;
 }
 
 .customer-option {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .option-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .empty-tip {
@@ -1007,520 +1142,223 @@ async function exportImage() {
   font-size: 14px;
 }
 
-.task-legend {
+.customer-tag {
+  font-weight: 500;
+}
+
+.amount-text {
+  font-weight: 600;
+  color: #303133;
+}
+
+.wechat-amount {
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.alipay-amount {
+  color: #409eff;
+  font-weight: 500;
+}
+
+.status-cell {
   display: flex;
-  gap: 20px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: #606266;
-}
-
-.legend-item {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.legend-dot {
+.remark-text {
+  font-size: 12px;
+  color: #909399;
+}
+
+.editable-code {
+  width: 100%;
+}
+
+.expand-detail {
+  padding: 16px 0;
+}
+
+.qr-mini-preview {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  border: 2px solid transparent;
 }
 
-.legend-completed {
-  background: #e1f3d8;
-  border-color: #67c23a;
+.qr-mini {
+  width: 60px;
+  height: 60px;
+  cursor: pointer;
+  border-radius: 4px;
 }
 
-.legend-pending {
-  background: #e8f4fd;
-  border-color: #409eff;
+.qr-preview-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
 }
 
-.legend-failed {
-  background: #fde2e2;
-  border-color: #f56c6c;
-}
-
-.person-groups {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-}
-
-.person-card {
-  background: #fafafa;
+.qr-preview-image {
+  max-width: 300px;
+  max-height: 300px;
   border-radius: 8px;
-  padding: 12px;
-  border: 1px solid #e4e7ed;
+}
+
+.el-table__expand-icon {
+  font-size: 16px;
+}
+
+.export-cards-container {
+  padding: 20px;
+  background: #ffffff;
 }
 
 .person-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e4e7ed;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e0e0e0;
 }
 
-.person-code {
-  font-size: 16px;
-  font-weight: 600;
-  color: #409eff;
+.person-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #333;
 }
 
 .task-count {
-  font-size: 12px;
-  color: #909399;
+  font-size: 14px;
+  color: #999;
 }
 
-.person-tasks {
+.cards-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
 }
 
 .task-card {
-  padding: 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s;
+  display: flex;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.task-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.task-content {
+.card-left {
   display: flex;
   align-items: center;
-  gap: 8px;
-  justify-content: space-between;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
 }
 
-.task-info {
+.qr-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  justify-content: center;
 }
 
-.task-card .customer-name {
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
+.qr-code {
+  max-width: 220px;
+  height: auto;
+  object-fit: contain;
 }
 
-.task-card .bank {
-  font-size: 14px;
-  color: #606266;
-  white-space: nowrap;
-  padding: 2px 8px;
-  border-radius: 4px;
-  margin-left: 8px;
-}
-
-.task-card .bank.bank-icbc {
-  background: linear-gradient(135deg, #e63946 0%, #cc2936 100%);
-  color: #fff;
-}
-
-.task-card .bank.bank-ccb {
-  background: linear-gradient(135deg, #2a9d8f 0%, #21867a 100%);
-  color: #fff;
-}
-
-.task-card .task-date {
+.qr-placeholder {
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  border-radius: 8px;
+  color: #999;
   font-size: 12px;
-  color: #909399;
 }
 
-.task-card .task-amount {
-  font-size: 16px;
-  font-weight: bold;
-  color: #303133;
+.card-right {
+  flex: 1;
+  padding: 16px;
+  background: #fff8f0;
 }
 
-.task-card .completed-badge {
-  font-size: 12px;
-  padding: 2px 8px;
-  background: #67c23a;
-  color: white;
-  border-radius: 4px;
+.card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.info-label {
+  color: #999;
+  min-width: 50px;
+}
+
+.info-value {
+  color: #333;
   font-weight: 500;
 }
 
-.amount-boxes {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+.customer-value {
+  font-weight: 600;
 }
 
-.amount-box {
-  font-size: 14px;
-  font-weight: bold;
-  padding: 4px 10px;
-  border-radius: 4px;
-  color: white;
-  white-space: nowrap;
+.wechat-value {
+  color: #07c160;
 }
 
-.green-box {
-  background: #67c23a;
-}
-
-.blue-box {
-  background: #409EFF;
-}
-
-.qr-code-section {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #d9d9d9;
-}
-
-.qr-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.qr-small {
-  width: 100px;
-  height: 100px;
-  object-fit: contain;
-  cursor: pointer;
-  border: 1px solid #eee;
-  border-radius: 4px;
-}
-
-.no-qr {
-  font-size: 12px;
-  color: #909399;
-}
-
-.task-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #d9d9d9;
-}
-
-.task-date {
-  font-size: 12px;
-  color: #909399;
-}
-
-.task-status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #fff7e6;
-  color: #e6a23c;
-}
-
-.no-task {
-  text-align: center;
-  color: #909399;
-  padding: 20px 0;
-  font-size: 13px;
-}
-
-.status-completed {
-  opacity: 0.95;
-}
-
-.person-table-container {
-  margin-top: 16px;
-}
-
-.amount-tag {
-  font-size: 12px;
-  font-weight: bold;
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: white;
-}
-
-.green-tag {
-  background: #67c23a;
-}
-
-.blue-tag {
-  background: #409EFF;
+.alipay-value {
+  color: #1677ff;
 }
 
 .status-tag {
-  font-size: 12px;
   padding: 2px 8px;
   border-radius: 4px;
+  font-size: 12px;
 }
 
 .status-pending {
   background: #fff7e6;
-  color: #e6a23c;
+  color: #faad14;
 }
 
 .status-completed {
-  background: #e1f3d8;
-  color: #67c23a;
+  background: #f6ffed;
+  color: #52c41a;
 }
 
 .status-failed {
-  background: #fde2e2;
-  color: #f56c6c;
-}
-
-.customer-tag {
-  font-weight: 600;
-  padding: 2px 8px;
-  border-left: 3px solid;
-  border-radius: 2px;
-}
-
-.person-card-view {
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 20px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-}
-
-.person-header-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 16px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #e4e7ed;
-}
-
-.person-title {
-  font-size: 24px;
-  font-weight: bold;
-  color: #409eff;
-}
-
-.task-count-badge {
-  font-size: 14px;
-  color: #909399;
-}
-
-.task-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.task-card-item {
-  display: flex;
-  background: #fff;
-  border: 4px solid #409eff;
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.task-card-main {
-  display: flex;
-  width: 100%;
-}
-
-.task-card-left {
-  flex: 1;
-  background: #fff;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  border-right: 2px solid #e4e7ed;
-}
-
-.card-number {
-  font-size: 24px;
-  font-weight: bold;
+  background: #fff2f0;
   color: #ff4d4f;
-  margin-bottom: 10px;
 }
 
-.task-card-info {
+.summary-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.customer-label {
-  font-size: 16px;
-  font-weight: 600;
-  color: #e6a23c;
-}
-
-.bank-label {
-  font-size: 14px;
-  color: #606266;
-}
-
-.task-card-amounts {
-  display: flex;
-  gap: 8px;
-}
-
-.amount-badge {
-  font-size: 16px;
-  font-weight: bold;
-  padding: 6px 14px;
-  border-radius: 6px;
-  color: white;
-}
-
-.green-badge {
-  background: #67c23a;
-}
-
-.blue-badge {
-  background: #409EFF;
-}
-
-.task-card-right {
-  flex: 1;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.detail-row {
-  display: flex;
-  margin-bottom: 10px;
-}
-
-.detail-row:last-child {
-  margin-bottom: 0;
-}
-
-.detail-label {
-  font-size: 18px;
-  font-weight: bold;
-  color: #303133;
-  min-width: 70px;
-}
-
-.detail-value {
-  font-size: 18px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.green-text {
-  color: #67c23a;
-}
-
-.blue-text {
-  color: #409EFF;
-}
-
-.status-text {
-  padding: 4px 12px;
-  border-radius: 4px;
-}
-
-.status-text.status-completed {
-  background: #e1f3d8;
-  color: #67c23a;
-}
-
-.status-text.status-pending {
-  background: #fff7e6;
-  color: #e6a23c;
-}
-
-.status-text.status-failed {
-  background: #fde2e2;
-  color: #f56c6c;
-}
-
-.qr-code-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.qr-code-image {
-  max-width: 300px;
-  max-height: 350px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  cursor: pointer;
-}
-
-.no-qr-code {
-  font-size: 12px;
-  color: #909399;
-  text-align: center;
-}
-
-.task-card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 12px;
-  margin-top: 12px;
-  border-top: 1px dashed #d9d9d9;
-}
-
-.status-badge {
-  font-size: 12px;
-  padding: 4px 12px;
-  border-radius: 4px;
-}
-
-.status-badge.status-pending {
-  background: #fff7e6;
-  color: #e6a23c;
-}
-
-.status-badge.status-completed {
-  background: #e1f3d8;
-  color: #67c23a;
-}
-
-.status-badge.status-failed {
-  background: #fde2e2;
-  color: #f56c6c;
-}
-
-.total-summary {
-  margin-top: 20px;
-  padding: 16px;
-  background: #f5f7fa;
+  justify-content: flex-end;
+  gap: 24px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #f5f5f5;
   border-radius: 8px;
 }
 
 .summary-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-}
-
-.summary-item:last-child {
-  margin-bottom: 0;
+  gap: 8px;
 }
 
 .summary-label {
   font-size: 14px;
-  color: #606266;
+  color: #666;
 }
 
 .summary-value {
@@ -1528,39 +1366,20 @@ async function exportImage() {
   font-weight: bold;
 }
 
-.summary-value.green {
-  color: #67c23a;
+.wechat-summary {
+  color: #07c160;
 }
 
-.summary-value.blue {
-  color: #409EFF;
+.alipay-summary {
+  color: #1677ff;
 }
 
-.summary-value.total {
-  color: #303133;
-  font-size: 18px;
+.total-summary {
+  color: #333;
 }
 
-.qr-preview-container {
-  display: flex;
-  justify-content: center;
-  padding: 20px;
-}
-
-.qr-preview-image {
-  max-width: 100%;
-  max-height: 400px;
-  object-fit: contain;
-}
-
-.qr-preview {
-  display: flex;
-  justify-content: center;
-}
-
-.qr-large {
-  width: 200px;
-  height: 200px;
-  object-fit: contain;
+.summary-item.total {
+  border-left: 1px solid #ddd;
+  padding-left: 24px;
 }
 </style>

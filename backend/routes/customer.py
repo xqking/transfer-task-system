@@ -75,6 +75,24 @@ def delete_customer(id):
         return jsonify({'code': 200, 'message': '删除成功'})
     return jsonify({'code': 400, 'message': '客户不存在'})
 
+@customer_bp.route('/batch-delete', methods=['DELETE'])
+def batch_delete_customer():
+    from models import Customer
+    data = request.json
+    ids = data.get('ids', [])
+    if not ids:
+        return jsonify({'code': 400, 'message': '请选择要删除的客户'})
+    
+    count = 0
+    for id in ids:
+        customer = Customer.query.get(id)
+        if customer:
+            customer.status = 0
+            count += 1
+    
+    db.session.commit()
+    return jsonify({'code': 200, 'message': f'成功删除 {count} 个客户'})
+
 @customer_bp.route('/banks', methods=['GET'])
 def get_banks():
     from models import Bank

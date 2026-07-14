@@ -4,11 +4,29 @@
       <template #header>
         <div class="card-header">
           <span>客户管理</span>
-          <el-button type="primary" @click="showAddDialog" :icon="Plus">添加客户</el-button>
+          <div class="card-actions">
+            <el-button
+              v-if="selectedIds.length > 0"
+              type="danger"
+              @click="batchDelete"
+              :icon="Delete"
+            >
+              批量删除 ({{ selectedIds.length }})
+            </el-button>
+            <el-button type="primary" @click="showAddDialog" :icon="Plus">添加客户</el-button>
+          </div>
         </div>
       </template>
 
-      <el-table :data="customerList" stripe style="width: 100%" :row-style="getRowStyle">
+      <el-table
+        :data="customerList"
+        stripe
+        style="width: 100%"
+        :row-style="getRowStyle"
+        :row-key="row => row.id"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" />
         <el-table-column label="颜色" width="100" align="center">
           <template #default="{ row }">
             <span class="color-swatch" :style="{ backgroundColor: row.color }" :title="row.color" />
@@ -58,7 +76,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -71,6 +89,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const form = ref({ name: '', color: '#409EFF' })
+const selectedIds = ref([])
 
 onMounted(async () => {
   await loadColorPalette()
@@ -168,12 +187,46 @@ async function deleteCustomer(id) {
     }
   }
 }
+
+function handleSelectionChange(val) {
+  selectedIds.value = val.map(item => item.id)
+}
+
+async function batchDelete() {
+  if (selectedIds.value.length === 0) {
+    ElMessage.warning('请选择要删除的客户')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedIds.value.length} 个客户吗？`,
+      '提示',
+      { type: 'warning' }
+    )
+    await axios.delete('/api/customer/batch-delete', {
+      data: { ids: selectedIds.value }
+    })
+    ElMessage.success('批量删除成功')
+    selectedIds.value = []
+    loadCustomerList()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error('批量删除失败')
+    }
+  }
+}
 </script>
 
 <style scoped>
 .card-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.card-actions {
+  display: flex;
+  gap: 12px;
   align-items: center;
 }
 

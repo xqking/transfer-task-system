@@ -1,15 +1,11 @@
 from flask import Blueprint, request, jsonify
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy import and_
 import random
 from extensions import db
 
 ALLOC_MIN = 2000
-ALLOC_MAX = 6000
-DAILY_PERSON_MIN = 6
-DAILY_PERSON_MAX = 10
-MAX_CONSECUTIVE_DAYS = 2
-WEEKLY_MAX_TASKS = 5
+ALLOC_MAX = 20000
 
 transfer_task_bp = Blueprint('transfer_task', __name__)
 
@@ -18,111 +14,73 @@ def _parse_date(d):
         return datetime.strptime(d, '%Y-%m-%d').date()
     return d
 
-def get_person_task_dates(person_id, TaskDetail, pending_allocs):
-    dates = set()
-    for d in TaskDetail.query.filter(
-        and_(TaskDetail.person_id == person_id, TaskDetail.status != 'cancelled')
-    ).all():
-        dates.add(d.task_date)
-    for a in pending_allocs:
-        if a['person_id'] == person_id:
-            dates.add(_parse_date(a['task_date']))
-    return sorted(dates)
-
-def get_consecutive_count(person_id, task_date, TaskDetail, pending_allocs, card_id=None):
-    if card_id:
-        dates = set()
-        for d in TaskDetail.query.filter(
-            and_(TaskDetail.person_id == person_id, TaskDetail.card_id == card_id, TaskDetail.status != 'cancelled')
-        ).all():
-            dates.add(d.task_date)
-        for a in pending_allocs:
-            if a['person_id'] == person_id and a.get('card_id') == card_id:
-                dates.add(_parse_date(a['task_date']))
-    else:
-        dates = get_person_task_dates(person_id, TaskDetail, pending_allocs)
-    
-    if not dates:
-        return 0
-    if task_date in dates:
-        dates.remove(task_date)
-    count = 0
-    d = task_date - timedelta(days=1)
-    while d in dates:
-        count += 1
-        d -= timedelta(days=1)
-    return count
-
-def get_weekly_task_count(person_id, task_date, TaskDetail, pending_allocs, card_id=None):
-    week_start = task_date - timedelta(days=6)
-    if card_id:
-        dates = set()
-        for d in TaskDetail.query.filter(
-            and_(TaskDetail.person_id == person_id, TaskDetail.card_id == card_id, TaskDetail.status != 'cancelled')
-        ).all():
-            dates.add(d.task_date)
-        for a in pending_allocs:
-            if a['person_id'] == person_id and a.get('card_id') == card_id:
-                dates.add(_parse_date(a['task_date']))
-        return sum(1 for d in dates if week_start <= d <= task_date)
-    else:
-        dates = get_person_task_dates(person_id, TaskDetail, pending_allocs)
-        return sum(1 for d in dates if week_start <= d <= task_date)
-
 def can_assign_person(person_id, task_date, day_person_set, TaskDetail, pending_allocs, card_id=None):
     if person_id in day_person_set:
         return False
-    cons = get_consecutive_count(person_id, task_date, TaskDetail, pending_allocs, card_id)
-    if cons >= MAX_CONSECUTIVE_DAYS:
-        return False
-    weekly = get_weekly_task_count(person_id, task_date, TaskDetail, pending_allocs, card_id)
-    if weekly >= WEEKLY_MAX_TASKS:
-        return False
     return True
 
-def get_alloc_limits(total_amount):
-    if total_amount <= 30000:
-        return 2000, 6000
-    elif total_amount <= 60000:
-        return 4000, 12000
-    else:
-        return 4000, 12000
+def get_alloc_limits(total_amount, alloc_min=None, alloc_max=None):
+    return alloc_min or ALLOC_MIN, alloc_max or ALLOC_MAX
 
-def calc_amount(remaining, person, card_room, total_amount):
-    alloc_min, alloc_max = get_alloc_limits(total_amount)
+def is_valid_amount(amount):
+    units = amount % 10
+    tens = (amount // 10) % 10
+    return units != 0 and tens != 0
+
+def calc_amount(remaining, person, card_room, total_amount, alloc_min=None, alloc_max=None):
+    alloc_min, alloc_max = get_alloc_limits(total_amount, alloc_min, alloc_max)
     
     caps = [remaining]
     if card_room is not None:
         caps.append(int(card_room))
     
     mx = min(caps + [alloc_max])
-    mn = max(int(person.single_min), alloc_min)
+    mn = alloc_min
     
     if mx < mn:
         return 0
     
     if remaining <= mx and remaining >= mn:
-        return remaining
+        if is_valid_amount(remaining):
+            return remaining
+        else:
+            candidates = []
+            for delta in range(1, 100):
+                for sign in [-1, 1]:
+                    adjusted = remaining + sign * delta
+                    if adjusted >= mn and adjusted <= mx and is_valid_amount(adjusted):
+                        candidates.append(adjusted)
+            if candidates:
+                return candidates[random.randint(0, len(candidates) - 1)]
     
     valid = []
     for a in range(mn, mx + 1):
         if (remaining - a) == 0 or (remaining - a) >= alloc_min:
-            valid.append(a)
+            if is_valid_amount(a):
+                valid.append(a)
     
     if valid:
         return max(valid)
     
+    candidates = []
+    for a in range(mn, mx + 1):
+        if is_valid_amount(a):
+            candidates.append(a)
+    
+    if candidates:
+        return candidates[random.randint(0, len(candidates) - 1)]
+    
     return random.randint(mn, mx)
 
-def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None):
+def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None, alloc_min=None, alloc_max=None):
     allocations = []
     remaining = int(total_amount)
     task_date = task_date or datetime.now().date()
+    
+    alloc_min_val, alloc_max_val = get_alloc_limits(total_amount, alloc_min, alloc_max)
 
-    day_cap = min(DAILY_PERSON_MAX, len(persons))
+    day_cap = len(persons)
     day_persons = set()
-    shuffled = list(persons)
-    random.shuffle(shuffled)
     
     debug_info = {
         'task_date': task_date.strftime('%Y-%m-%d'),
@@ -149,39 +107,73 @@ def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None):
             'skipped_reasons': {}
         }
 
+        shuffled = list(persons)
+        random.shuffle(shuffled)
+
         for person in shuffled:
             if remaining <= 0:
                 break
             if len(day_persons) >= day_cap:
                 card_debug['skipped_reasons']['day_cap_reached'] = f'已达到每日上限{day_cap}人'
                 break
-            alloc_min, _ = get_alloc_limits(total_amount)
-            if card_room < alloc_min:
-                card_debug['skipped_reasons']['card_full'] = f'卡额度不足(剩余{card_room}<{alloc_min})'
+            if card_room < alloc_min_val:
+                card_debug['skipped_reasons']['card_full'] = f'卡额度不足(剩余{card_room}<{alloc_min_val})'
                 break
-            
-            reason = None
-            cons = get_consecutive_count(person.id, task_date, TaskDetail, allocations, card.id)
-            if cons >= MAX_CONSECUTIVE_DAYS:
-                reason = f'该卡连续{cons}天已达上限'
-            
-            weekly = get_weekly_task_count(person.id, task_date, TaskDetail, allocations, card.id)
-            if weekly >= WEEKLY_MAX_TASKS:
-                reason = f'该卡本周已{weekly}次达上限'
-            
-            if reason:
-                card_debug['skipped_reasons'][person.code] = reason
+
+            used_by_person = sum(a['amount'] for a in allocations if a['person_id'] == person.id)
+            if used_by_person >= alloc_max_val:
                 continue
 
-            amount = calc_amount(remaining, person, card_room, total_amount)
-            alloc_min, _ = get_alloc_limits(total_amount)
-            if amount < alloc_min:
-                card_debug['skipped_reasons'][person.code] = f'金额计算失败(amount={amount})'
+            person_remaining = alloc_max_val - used_by_person
+            if person_remaining < alloc_min_val:
                 continue
+
+            max_possible = min(person_remaining, remaining, card_room, alloc_max_val)
+            
+            if max_possible < alloc_min_val:
+                continue
+
+            if remaining <= alloc_max_val:
+                target_amount = remaining
+            else:
+                target_amount = max_possible
+            
+            target_amount = min(target_amount, max_possible)
+            target_amount = max(target_amount, alloc_min_val)
+
+            candidates = []
+            search_low = max(alloc_min_val, target_amount - 1000)
+            for a in range(target_amount, search_low - 1, -1):
+                if a < alloc_min_val:
+                    break
+                if is_valid_amount(a):
+                    remaining_after = remaining - a
+                    if remaining_after == 0 or remaining_after >= alloc_min_val:
+                        candidates.append(a)
+                        if len(candidates) >= 15:
+                            break
+            
+            if not candidates:
+                for a in range(min(target_amount, alloc_max_val), alloc_min_val - 1, -1):
+                    if is_valid_amount(a):
+                        remaining_after = remaining - a
+                        if remaining_after == 0 or remaining_after >= alloc_min_val:
+                            candidates.append(a)
+                            if len(candidates) >= 15:
+                                break
+            
+            if candidates:
+                amount = candidates[random.randint(0, min(8, len(candidates)) - 1)]
+            else:
+                valid_amounts = [a for a in range(alloc_min_val, min(target_amount, alloc_max_val) + 1) if is_valid_amount(a)]
+                if valid_amounts:
+                    amount = valid_amounts[-1]
+                else:
+                    continue
 
             allocations.append({
                 'person_id': person.id,
-                'person_code': person.code,
+                'person_name': person.name,
                 'card_id': card.id,
                 'card_no': card.card_no[-4:],
                 'amount': amount,
@@ -198,24 +190,61 @@ def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None):
     debug_info['allocated_count'] = len(allocations)
 
     if remaining > 0:
-        for alloc in allocations:
-            if remaining <= 0:
-                break
+        alloc_with_room = [a for a in allocations if a['amount'] < alloc_max_val]
+        alloc_with_room.sort(key=lambda x: x['amount'])
+        while remaining > 0 and alloc_with_room:
+            alloc = alloc_with_room.pop(0)
             
-            current_amount = alloc['amount']
-            max_add = ALLOC_MAX - current_amount
+            max_add = alloc_max_val - alloc['amount']
             if max_add <= 0:
                 continue
             
-            room = min(max_add, 60000)
-            if room <= 0:
+            add_amount = min(remaining, max_add)
+            
+            new_amount = alloc['amount'] + add_amount
+            while not is_valid_amount(new_amount) and add_amount > 0:
+                add_amount -= 1
+                new_amount = alloc['amount'] + add_amount
+            
+            if is_valid_amount(new_amount) and add_amount > 0:
+                alloc['amount'] = new_amount
+                remaining -= add_amount
+
+    if remaining > 0 and remaining >= alloc_min_val:
+        for card in cards:
+            if remaining <= 0:
+                break
+            card_used = sum(a['amount'] for a in allocations if a['card_id'] == card.id)
+            card_room = 60000 - card_used
+            if card_room < alloc_min_val:
                 continue
             
-            add = min(remaining, room)
-            new_amount = current_amount + add
-            
-            alloc['amount'] = new_amount
-            remaining -= add
+            for person in persons:
+                if remaining <= 0:
+                    break
+                used_by_person = sum(a['amount'] for a in allocations if a['person_id'] == person.id)
+                person_remaining = alloc_max_val - used_by_person
+                if person_remaining < alloc_min_val:
+                    continue
+                
+                target = min(remaining, person_remaining, card_room)
+                if target < alloc_min_val:
+                    continue
+                
+                valid_amounts = [a for a in range(target, alloc_min_val - 1, -1) if is_valid_amount(a)]
+                if valid_amounts:
+                    amount = valid_amounts[0]
+                    allocations.append({
+                        'person_id': person.id,
+                        'person_name': person.name,
+                        'card_id': card.id,
+                        'card_no': card.card_no[-4:],
+                        'amount': amount,
+                        'task_date': task_date.strftime('%Y-%m-%d')
+                    })
+                    day_persons.add(person.id)
+                    remaining -= amount
+                    card_room -= amount
 
     return allocations, remaining, debug_info
 
@@ -250,20 +279,19 @@ def create_task():
     if not persons:
         return jsonify({'code': 400, 'message': '没有可用的人员，请先添加人员'})
     
-    if len(persons) < DAILY_PERSON_MIN:
-        return jsonify({'code': 400, 'message': f'人员不足，每天需要{DAILY_PERSON_MIN}-{DAILY_PERSON_MAX}人，当前仅{len(persons)}人'})
+
     
     start_date = datetime.strptime(data.get('task_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
     total_amount = int(data['total_amount'])
     
-    max_capacity = DAILY_PERSON_MAX * ALLOC_MAX * len(cards)
-    if total_amount > max_capacity:
-        return jsonify({
-            'code': 400,
-            'message': f'任务金额 ¥{total_amount} 超出最大容量 ¥{max_capacity}（{DAILY_PERSON_MAX}人 x ¥{ALLOC_MAX}/人 x {len(cards)}张卡）'
-        })
+    alloc_min = data.get('alloc_min')
+    alloc_max = data.get('alloc_max')
+    if alloc_min:
+        alloc_min = int(alloc_min)
+    if alloc_max:
+        alloc_max = int(alloc_max)
     
-    allocations, remaining, debug_info = simulate_allocate(total_amount, cards, persons, TaskDetail, start_date)
+    allocations, remaining, debug_info = simulate_allocate(total_amount, cards, persons, TaskDetail, start_date, alloc_min, alloc_max)
     
     if remaining > 0:
         details = []
@@ -362,7 +390,7 @@ def get_gantt_data(task_id):
     
     gantt_data = []
     for person in persons:
-        row = {'person_code': person.code, 'dates': {}}
+        row = {'person_id': person.id, 'person_name': person.name, 'dates': {}}
         for date in dates:
             ds = date.strftime('%Y-%m-%d')
             pds = [d for d in details if d.person_id == person.id and d.task_date == date]

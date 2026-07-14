@@ -4,7 +4,7 @@ from datetime import datetime
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:xxx123456@localhost:3306/transfer_task_system?charset=utf8mb4'
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:MySql123!@localhost:3306/account_transactions?charset=utf8mb4'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
     SECRET_KEY = 'transfer-task-system-2026'
