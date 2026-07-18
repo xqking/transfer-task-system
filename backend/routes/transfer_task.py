@@ -3,9 +3,12 @@ from datetime import datetime
 from sqlalchemy import and_
 import random
 from extensions import db
+from models import BankCard, TaskDetail, Person, TransferTask, Customer, Bank
 
 ALLOC_MIN = 2000
 ALLOC_MAX = 20000
+MAX_CONSECUTIVE_DAYS = 2
+MAX_CUSTOMERS_PER_PERSON = 2
 
 transfer_task_bp = Blueprint('transfer_task', __name__)
 
@@ -18,6 +21,30 @@ def can_assign_person(person_id, task_date, day_person_set, TaskDetail, pending_
     if person_id in day_person_set:
         return False
     return True
+
+def has_consecutive_allocation(person_id, card_id, task_date, TaskDetail, max_consecutive=MAX_CONSECUTIVE_DAYS):
+    from datetime import timedelta
+    
+    consecutive_count = 0
+    check_date = task_date - timedelta(days=1)
+    
+    for _ in range(max_consecutive):
+        existing = TaskDetail.query.filter(
+            and_(
+                TaskDetail.person_id == person_id,
+                TaskDetail.card_id == card_id,
+                TaskDetail.task_date == check_date,
+                TaskDetail.status.in_(['pending', 'completed'])
+            )
+        ).first()
+        
+        if existing:
+            consecutive_count += 1
+            check_date -= timedelta(days=1)
+        else:
+            break
+    
+    return consecutive_count >= max_consecutive
 
 def get_alloc_limits(total_amount, alloc_min=None, alloc_max=None):
     return alloc_min or ALLOC_MIN, alloc_max or ALLOC_MAX
@@ -72,7 +99,7 @@ def calc_amount(remaining, person, card_room, total_amount, alloc_min=None, allo
     
     return random.randint(mn, mx)
 
-def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None, alloc_min=None, alloc_max=None):
+def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None, alloc_min=None, alloc_max=None, force_allocate=False):
     allocations = []
     remaining = int(total_amount)
     task_date = task_date or datetime.now().date()
@@ -127,6 +154,24 @@ def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None, 
             person_remaining = alloc_max_val - used_by_person
             if person_remaining < alloc_min_val:
                 continue
+
+            if has_consecutive_allocation(person.id, card.id, task_date, TaskDetail):
+                if not force_allocate:
+                    card_debug['skipped_reasons'][f'person_{person.id}'] = f'人员{person.name}已连续{MAX_CONSECUTIVE_DAYS}天分配此卡，今日跳过'
+                    continue
+
+            customer_count = TaskDetail.query.filter(
+                and_(
+                    TaskDetail.person_id == person.id,
+                    TaskDetail.task_date == task_date,
+                    TaskDetail.status.in_(['pending', 'completed'])
+                )
+            ).join(TaskDetail.card).distinct(BankCard.customer_id).count()
+            
+            if customer_count >= MAX_CUSTOMERS_PER_PERSON:
+                if not force_allocate:
+                    card_debug['skipped_reasons'][f'person_{person.id}'] = f'人员{person.name}今日已分配{customer_count}个客户任务，达到上限{MAX_CUSTOMERS_PER_PERSON}个'
+                    continue
 
             max_possible = min(person_remaining, remaining, card_room, alloc_max_val)
             
@@ -286,12 +331,13 @@ def create_task():
     
     alloc_min = data.get('alloc_min')
     alloc_max = data.get('alloc_max')
+    force_allocate = data.get('force_allocate', False)
     if alloc_min:
         alloc_min = int(alloc_min)
     if alloc_max:
         alloc_max = int(alloc_max)
     
-    allocations, remaining, debug_info = simulate_allocate(total_amount, cards, persons, TaskDetail, start_date, alloc_min, alloc_max)
+    allocations, remaining, debug_info = simulate_allocate(total_amount, cards, persons, TaskDetail, start_date, alloc_min, alloc_max, force_allocate)
     
     if remaining > 0:
         details = []
@@ -358,7 +404,32 @@ def create_task():
 @transfer_task_bp.route('/list', methods=['GET'])
 def get_task_list():
     from models import TransferTask
-    tasks = TransferTask.query.order_by(TransferTask.created_at.desc()).all()
+    from sqlalchemy import and_, or_
+    
+    keyword = request.args.get('keyword', '').strip()
+    customer_id = request.args.get('customer_id', '').strip()
+    bank_id = request.args.get('bank_id', '').strip()
+    status = request.args.get('status', '').strip()
+    task_date = request.args.get('task_date', '').strip()
+    
+    query = TransferTask.query
+    
+    if keyword:
+        query = query.filter(TransferTask.task_name.like(f'%{keyword}%'))
+    
+    if customer_id:
+        query = query.filter(TransferTask.customer_id == int(customer_id))
+    
+    if bank_id:
+        query = query.filter(TransferTask.bank_id == int(bank_id))
+    
+    if status:
+        query = query.filter(TransferTask.status == status)
+    
+    if task_date:
+        query = query.filter(TransferTask.task_date == task_date)
+    
+    tasks = query.order_by(TransferTask.created_at.desc()).all()
     return jsonify({
         'code': 200,
         'data': [{
@@ -369,6 +440,7 @@ def get_task_list():
             'total_amount': t.total_amount,
             'transferred_amount': t.transferred_amount,
             'status': t.status,
+            'remark': t.remark if hasattr(t, 'remark') else '',
             'detail_count': len(t.details)
         } for t in tasks]
     })
@@ -423,6 +495,87 @@ def delete_task(id):
         db.session.commit()
         return jsonify({'code': 200, 'message': '删除成功'})
     return jsonify({'code': 400, 'message': '任务不存在'})
+
+@transfer_task_bp.route('/check-person-status', methods=['POST'])
+def check_person_status():
+    from models import Person, BankCard, TaskDetail
+    data = request.json
+    
+    customer_id = data.get('customer_id')
+    bank_id = data.get('bank_id')
+    task_date = datetime.strptime(data.get('task_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+    
+    if not customer_id or not bank_id:
+        return jsonify({'code': 400, 'message': '请选择客户和银行'})
+    
+    cards = BankCard.query.filter(
+        and_(
+            BankCard.customer_id == customer_id,
+            BankCard.bank_id == bank_id,
+            BankCard.status == 1
+        )
+    ).all()
+    
+    if not cards:
+        return jsonify({'code': 400, 'message': '该客户在此银行没有可用的银行卡'})
+    
+    card_ids = [c.id for c in cards]
+    
+    persons = Person.query.filter_by(status=1).all()
+    
+    result = []
+    for person in persons:
+        status = 'available'
+        reason = ''
+        consecutive_days = 0
+        today_customer_count = 0
+        
+        customer_count = TaskDetail.query.filter(
+            and_(
+                TaskDetail.person_id == person.id,
+                TaskDetail.task_date == task_date,
+                TaskDetail.status.in_(['pending', 'completed'])
+            )
+        ).join(TaskDetail.card).distinct(BankCard.customer_id).count()
+        today_customer_count = customer_count
+        
+        if customer_count >= MAX_CUSTOMERS_PER_PERSON:
+            status = 'blocked'
+            reason = f'今日已分配{customer_count}个客户任务，达到上限{MAX_CUSTOMERS_PER_PERSON}个'
+            result.append({
+                'id': person.id,
+                'code': person.code,
+                'name': person.name,
+                'status': status,
+                'reason': reason,
+                'consecutive_days': consecutive_days,
+                'today_customer_count': today_customer_count
+            })
+            continue
+        
+        for card_id in card_ids:
+            count = has_consecutive_allocation(person.id, card_id, task_date, TaskDetail, MAX_CONSECUTIVE_DAYS)
+            if count:
+                consecutive_days = MAX_CONSECUTIVE_DAYS
+                status = 'blocked'
+                reason = f'已连续{MAX_CONSECUTIVE_DAYS}天分配此卡，今日跳过'
+                break
+        
+        result.append({
+            'id': person.id,
+            'code': person.code,
+            'name': person.name,
+            'status': status,
+            'reason': reason,
+            'consecutive_days': consecutive_days,
+            'today_customer_count': today_customer_count
+        })
+    
+    return jsonify({
+        'code': 200,
+        'data': result,
+        'card_count': len(cards)
+    })
 
 @transfer_task_bp.route('/batch-delete', methods=['POST'])
 def batch_delete_tasks():

@@ -83,24 +83,6 @@
         </div>
 
         <div class="filter-group">
-          <span class="filter-label">人员：</span>
-          <el-select
-            v-model="selectedPersonId"
-            clearable
-            placeholder="全部人员"
-            style="width: 160px;"
-            @change="loadCalendarData"
-          >
-            <el-option
-              v-for="p in personList"
-              :key="p.id"
-              :label="p.name"
-              :value="p.id"
-            />
-          </el-select>
-        </div>
-
-        <div class="filter-group">
           <span class="filter-label">银行：</span>
           <el-select
             v-model="selectedBankId"
@@ -114,6 +96,24 @@
               :key="b.id"
               :label="b.name"
               :value="b.id"
+            />
+          </el-select>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">人员：</span>
+          <el-select
+            v-model="selectedPersonId"
+            clearable
+            placeholder="全部人员"
+            style="width: 160px;"
+            @change="loadCalendarData"
+          >
+            <el-option
+              v-for="p in personList"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
             />
           </el-select>
         </div>
@@ -154,8 +154,27 @@
         <el-button type="success" @click="batchUpdateStatus('completed')" :disabled="selectedRows.length === 0">批量已完成</el-button>
         <el-button type="warning" @click="batchUpdateStatus('pending')" :disabled="selectedRows.length === 0">批量待完成</el-button>
         <el-button type="danger" @click="batchUpdateStatus('failed')" :disabled="selectedRows.length === 0">批量失败</el-button>
-        <el-button type="default" @click="batchDelete" :disabled="selectedRows.length === 0" :icon="Delete">批量删除</el-button>
-        <el-button type="success" @click="exportExcel" :icon="Document">导出Excel</el-button>
+        <el-button class="btn-delete" @click="batchDelete" :disabled="selectedRows.length === 0" :icon="Delete">批量删除</el-button>
+        <el-button type="info" @click="exportExcel" :icon="Document">导出Excel</el-button>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-value">{{ formatAmount(dayTotalAmount) }}</span>
+          <span class="stat-label">当日总金额</span>
+        </div>
+        <div class="stat-item completed">
+          <span class="stat-value">{{ formatAmount(dayCompletedAmount) }}</span>
+          <span class="stat-label">已完成金额</span>
+        </div>
+        <div class="stat-item pending">
+          <span class="stat-value">{{ formatAmount(dayTotalAmount - dayCompletedAmount - dayFailedAmount) }}</span>
+          <span class="stat-label">待完成金额</span>
+        </div>
+        <div class="stat-item failed">
+          <span class="stat-value">{{ formatAmount(dayFailedAmount) }}</span>
+          <span class="stat-label">失败金额</span>
+        </div>
       </div>
 
       <el-table
@@ -164,9 +183,9 @@
         border
         style="width: 100%;"
         row-key="id"
-        :expand-row-keys="expandedRowKeys"
-        @expand-change="handleExpandChange"
+        fit
         @selection-change="handleSelectionChange"
+        cell-class-name="table-cell-center"
       >
         <el-table-column type="selection" width="50" />
 
@@ -209,11 +228,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" width="150">
+        <el-table-column label="来源" width="100">
           <template #default="{ row }">
-            <span class="remark-text">{{ row.remark || '-' }}</span>
+            <el-tag :type="row.remark && row.remark !== '-' ? 'primary' : 'success'" size="small">
+              {{ row.remark && row.remark !== '-' ? '手动' : '自动' }}
+            </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="200" />
         <el-table-column label="操作" width="80">
           <template #default="{ row }">
             <el-button size="small" @click="openEditDialog(row)" :icon="Edit">编辑</el-button>
@@ -437,10 +459,9 @@ watch(() => addTaskForm.value.wechat_amount, () => {})
 watch(() => addTaskForm.value.alipay_amount, () => {})
 
 const today = new Date()
-const weekLater = new Date(today.getTime() + 6 * 24 * 60 * 60 * 1000)
 dateRange.value = [
   today.toISOString().split('T')[0],
-  weekLater.toISOString().split('T')[0]
+  today.toISOString().split('T')[0]
 ]
 
 const taskTableData = computed(() => {
@@ -473,6 +494,26 @@ const totalTasks = computed(() => taskTableData.value.length)
 const completedTasks = computed(() => taskTableData.value.filter(t => t.status === 'completed').length)
 const pendingTasks = computed(() => taskTableData.value.filter(t => t.status === 'pending').length)
 const failedTasks = computed(() => taskTableData.value.filter(t => t.status === 'failed').length)
+
+const dayTotalAmount = computed(() => {
+  return taskTableData.value.reduce((sum, t) => sum + (t.amount || 0), 0)
+})
+
+const dayCompletedAmount = computed(() => {
+  return taskTableData.value
+    .filter(t => t.status === 'completed')
+    .reduce((sum, t) => sum + (t.amount || 0), 0)
+})
+
+const dayFailedAmount = computed(() => {
+  return taskTableData.value
+    .filter(t => t.status === 'failed')
+    .reduce((sum, t) => sum + (t.amount || 0), 0)
+})
+
+function formatAmount(amount) {
+  return `¥${Math.round(amount).toLocaleString()}`
+}
 
 function handleExpandChange(row, expandedRows) {
   expandedRowKeys.value = expandedRows.map(r => r.id)
@@ -1120,6 +1161,109 @@ function exportExcel() {
 .selected-count {
   font-size: 14px;
   color: #606266;
+}
+
+.stats-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.table-cell-center {
+  text-align: center;
+}
+
+.el-table .el-button::after {
+  content: none;
+}
+
+.el-table__column-filter-trigger {
+  display: none;
+}
+
+.stat-item {
+  flex: 1;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  border: 1px solid #ebeef5;
+}
+
+.stat-item .stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: bold;
+  color: #667eea;
+}
+
+.stat-item .stat-label {
+  display: block;
+  font-size: 14px;
+  color: #909399;
+  margin-top: 8px;
+}
+
+.stat-item.completed .stat-value {
+  color: #67c23a;
+}
+
+.stat-item.pending .stat-value {
+  color: #e6a23c;
+}
+
+.stat-item.manual .stat-value {
+  color: #f56c6c;
+}
+
+.stat-item.failed .stat-value {
+  color: #909399;
+}
+
+.btn-delete {
+  --el-button-bg-color: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+  --el-button-text-color: #fff;
+  --el-button-border-color: #8e44ad;
+  --el-button-hover-bg-color: linear-gradient(135deg, #8e44ad 0%, #7d3c98 100%);
+  --el-button-hover-border-color: #7d3c98;
+  background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+  border-color: #8e44ad;
+  color: white;
+}
+
+.btn-delete:not(:disabled):hover {
+  background: linear-gradient(135deg, #8e44ad 0%, #7d3c98 100%);
+  border-color: #7d3c98;
+}
+
+.btn-delete.is-disabled {
+  opacity: 0.5;
+  background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+  border-color: #8e44ad;
+  color: white;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.action-bar .el-button--success:not(:disabled):hover {
+  --el-button-hover-bg-color: #52c41a;
+  --el-button-hover-border-color: #52c41a;
+  background-color: #52c41a;
+  border-color: #52c41a;
+}
+
+.action-bar .el-button--warning:not(:disabled):hover {
+  --el-button-hover-bg-color: #d4943c;
+  --el-button-hover-border-color: #d4943c;
+  background-color: #d4943c;
+  border-color: #d4943c;
+}
+
+.action-bar .el-button--danger:not(:disabled):hover {
+  --el-button-hover-bg-color: #dc2626;
+  --el-button-hover-border-color: #dc2626;
+  background-color: #dc2626;
+  border-color: #dc2626;
 }
 
 .customer-option {

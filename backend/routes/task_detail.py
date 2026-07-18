@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
+from sqlalchemy import func
 from extensions import db
 
 task_detail_bp = Blueprint('task_detail', __name__)
@@ -287,7 +288,7 @@ def create_task_detail():
             task_type='manual',
             start_date=datetime.strptime(task_date, '%Y-%m-%d').date(),
             status='pending',
-            remark='手动创建的任务'
+            remark=remark or '手动添加'
         )
         db.session.add(task)
         db.session.commit()
@@ -403,5 +404,110 @@ def get_calendar_data():
         'data': {
             'dates': dates,
             'persons': persons
+        }
+    })
+
+@task_detail_bp.route('/merge-tasks', methods=['POST'])
+def merge_tasks():
+    from models import TransferTask, TaskDetail
+    data = request.json
+    
+    from_task_id = data.get('from_task_id')
+    to_task_id = data.get('to_task_id')
+    
+    if not from_task_id or not to_task_id:
+        return jsonify({'code': 400, 'message': '缺少必要参数'})
+    
+    from_task = TransferTask.query.get(from_task_id)
+    to_task = TransferTask.query.get(to_task_id)
+    
+    if not from_task:
+        return jsonify({'code': 400, 'message': '源任务不存在'})
+    
+    if not to_task:
+        return jsonify({'code': 400, 'message': '目标任务不存在'})
+    
+    if from_task.id == to_task.id:
+        return jsonify({'code': 400, 'message': '不能合并到自身'})
+    
+    TaskDetail.query.filter_by(task_id=from_task_id).update({'task_id': to_task_id})
+    
+    to_task.total_amount += from_task.total_amount
+    to_task.transferred_amount += from_task.transferred_amount
+    
+    db.session.delete(from_task)
+    db.session.commit()
+    
+    return jsonify({'code': 200, 'message': '合并成功', 'data': {'merged_amount': from_task.total_amount}})
+
+@task_detail_bp.route('/dashboard', methods=['GET'])
+def get_dashboard_data():
+    from models import TaskDetail, Customer, BankCard, Bank
+    
+    start_date = request.args.get('start_date', datetime.now().strftime('%Y-%m-%d'))
+    end_date = request.args.get('end_date', datetime.now().strftime('%Y-%m-%d'))
+    
+    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+    
+    customers = Customer.query.filter_by(status=1).all()
+    
+    result = []
+    
+    for customer in customers:
+        cards = BankCard.query.filter_by(customer_id=customer.id, status=1).all()
+        
+        customer_total = 0
+        customer_completed = 0
+        
+        card_data = []
+        for card in cards:
+            bank = Bank.query.get(card.bank_id)
+            
+            card_total = TaskDetail.query.filter(
+                TaskDetail.card_id == card.id,
+                TaskDetail.task_date >= start_date_obj,
+                TaskDetail.task_date <= end_date_obj
+            ).with_entities(func.sum(TaskDetail.amount)).scalar() or 0
+            
+            card_completed = TaskDetail.query.filter(
+                TaskDetail.card_id == card.id,
+                TaskDetail.task_date >= start_date_obj,
+                TaskDetail.task_date <= end_date_obj,
+                TaskDetail.status == 'completed'
+            ).with_entities(func.sum(TaskDetail.amount)).scalar() or 0
+            
+            card_data.append({
+                'card_id': card.id,
+                'bank_id': bank.id,
+                'bank_name': bank.name,
+                'card_no': card.card_no[-4:],
+                'total_amount': card_total,
+                'completed_amount': card_completed,
+                'pending_amount': card_total - card_completed
+            })
+            
+            customer_total += card_total
+            customer_completed += card_completed
+        
+        result.append({
+            'customer_id': customer.id,
+            'customer_name': customer.name,
+            'customer_color': customer.color,
+            'total_amount': customer_total,
+            'completed_amount': customer_completed,
+            'pending_amount': customer_total - customer_completed,
+            'cards': card_data
+        })
+    
+    return jsonify({
+        'code': 200,
+        'data': {
+            'start_date': start_date,
+            'end_date': end_date,
+            'customers': result,
+            'grand_total': sum(c['total_amount'] for c in result),
+            'grand_completed': sum(c['completed_amount'] for c in result),
+            'grand_pending': sum(c['pending_amount'] for c in result)
         }
     })

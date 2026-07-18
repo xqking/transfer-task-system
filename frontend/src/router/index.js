@@ -4,12 +4,18 @@ import PersonManage from '../views/PersonManage.vue'
 import CustomerManage from '../views/CustomerManage.vue'
 import BankCardManage from '../views/BankCardManage.vue'
 import TransferTask from '../views/TransferTask.vue'
+import Dashboard from '../views/Dashboard.vue'
 
 const routes = [
   {
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: Dashboard
   },
   {
     path: '/person',

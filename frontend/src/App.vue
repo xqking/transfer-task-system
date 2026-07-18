@@ -10,6 +10,7 @@
         :ellipsis="false"
       >
         <el-menu-item index="/">首页</el-menu-item>
+        <el-menu-item index="/dashboard">任务大屏</el-menu-item>
         <el-menu-item index="/person">人员管理</el-menu-item>
         <el-menu-item index="/customer">客户管理</el-menu-item>
         <el-menu-item index="/bankcard">银行卡管理</el-menu-item>
