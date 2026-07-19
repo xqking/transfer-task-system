@@ -459,6 +459,7 @@ def get_dashboard_data():
         
         customer_total = 0
         customer_completed = 0
+        customer_failed = 0
         
         card_data = []
         for card in cards:
@@ -477,6 +478,13 @@ def get_dashboard_data():
                 TaskDetail.status == 'completed'
             ).with_entities(func.sum(TaskDetail.amount)).scalar() or 0
             
+            card_failed = TaskDetail.query.filter(
+                TaskDetail.card_id == card.id,
+                TaskDetail.task_date >= start_date_obj,
+                TaskDetail.task_date <= end_date_obj,
+                TaskDetail.status == 'failed'
+            ).with_entities(func.sum(TaskDetail.amount)).scalar() or 0
+            
             card_data.append({
                 'card_id': card.id,
                 'bank_id': bank.id,
@@ -484,11 +492,13 @@ def get_dashboard_data():
                 'card_no': card.card_no[-4:],
                 'total_amount': card_total,
                 'completed_amount': card_completed,
-                'pending_amount': card_total - card_completed
+                'pending_amount': card_total - card_completed - card_failed,
+                'failed_amount': card_failed
             })
             
             customer_total += card_total
             customer_completed += card_completed
+            customer_failed += card_failed
         
         result.append({
             'customer_id': customer.id,
@@ -496,7 +506,8 @@ def get_dashboard_data():
             'customer_color': customer.color,
             'total_amount': customer_total,
             'completed_amount': customer_completed,
-            'pending_amount': customer_total - customer_completed,
+            'pending_amount': customer_total - customer_completed - customer_failed,
+            'failed_amount': customer_failed,
             'cards': card_data
         })
     
@@ -508,6 +519,7 @@ def get_dashboard_data():
             'customers': result,
             'grand_total': sum(c['total_amount'] for c in result),
             'grand_completed': sum(c['completed_amount'] for c in result),
-            'grand_pending': sum(c['pending_amount'] for c in result)
+            'grand_pending': sum(c['pending_amount'] for c in result),
+            'grand_failed': sum(c['failed_amount'] for c in result)
         }
     })

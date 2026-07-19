@@ -577,6 +577,92 @@ def check_person_status():
         'card_count': len(cards)
     })
 
+@transfer_task_bp.route('/person-status-by-card', methods=['GET'])
+def get_person_status_by_card():
+    from models import Person, BankCard, Customer, Bank
+    
+    task_date = datetime.strptime(request.args.get('task_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+    
+    customers = Customer.query.filter_by(status=1).all()
+    persons = Person.query.filter_by(status=1).all()
+    
+    result = []
+    
+    for customer in customers:
+        customer_data = {
+            'customer_id': customer.id,
+            'customer_name': customer.name,
+            'customer_color': customer.color,
+            'banks': []
+        }
+        
+        cards = BankCard.query.filter_by(customer_id=customer.id, status=1).all()
+        
+        bank_groups = {}
+        for card in cards:
+            bank = Bank.query.get(card.bank_id)
+            if bank.id not in bank_groups:
+                bank_groups[bank.id] = {
+                    'bank_id': bank.id,
+                    'bank_name': bank.name,
+                    'cards': []
+                }
+            bank_groups[bank.id]['cards'].append(card)
+        
+        for bank_id, bank_data in bank_groups.items():
+            bank_result = {
+                'bank_id': bank_data['bank_id'],
+                'bank_name': bank_data['bank_name'],
+                'available_persons': [],
+                'blocked_persons': []
+            }
+            
+            card_ids = [c.id for c in bank_data['cards']]
+            
+            for person in persons:
+                status = 'available'
+                reason = ''
+                
+                customer_count = TaskDetail.query.filter(
+                    and_(
+                        TaskDetail.person_id == person.id,
+                        TaskDetail.task_date == task_date,
+                        TaskDetail.status.in_(['pending', 'completed'])
+                    )
+                ).join(TaskDetail.card).distinct(BankCard.customer_id).count()
+                
+                if customer_count >= MAX_CUSTOMERS_PER_PERSON:
+                    status = 'blocked'
+                    reason = f'今日已分配{customer_count}个客户任务'
+                else:
+                    for card_id in card_ids:
+                        count = has_consecutive_allocation(person.id, card_id, task_date, TaskDetail, MAX_CONSECUTIVE_DAYS)
+                        if count:
+                            status = 'blocked'
+                            reason = f'已连续{MAX_CONSECUTIVE_DAYS}天分配此卡'
+                            break
+                
+                person_info = {
+                    'id': person.id,
+                    'name': person.name,
+                    'status': status,
+                    'reason': reason
+                }
+                
+                if status == 'available':
+                    bank_result['available_persons'].append(person_info)
+                else:
+                    bank_result['blocked_persons'].append(person_info)
+            
+            customer_data['banks'].append(bank_result)
+        
+        result.append(customer_data)
+    
+    return jsonify({
+        'code': 200,
+        'data': result
+    })
+
 @transfer_task_bp.route('/batch-delete', methods=['POST'])
 def batch_delete_tasks():
     from models import TransferTask, TaskDetail

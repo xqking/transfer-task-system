@@ -1,215 +1,231 @@
 <template>
   <div class="transfer-task">
-    <div class="main-layout">
-      <div class="left-column">
-        <el-card class="main-card">
-          <template #header>
-            <div class="card-header">
-              <span>创建转账任务</span>
-            </div>
-          </template>
-
-          <el-form :model="taskForm" label-width="120px" :rules="rules" ref="formRef">
-            <el-row :gutter="20">
-              <el-col :span="12">
-                <el-form-item label="任务名称" prop="task_name">
-                  <el-input v-model="taskForm.task_name" placeholder="如：张三建设银行转账" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="20">
-              <el-col :span="12">
-                <el-form-item label="选择客户" prop="customer_id">
-                  <el-select 
-                    v-model="taskForm.customer_id" 
-                    placeholder="请选择客户" 
-                    style="width: 100%;"
-                    @change="onCustomerChange"
-                  >
-                    <el-option 
-                      v-for="c in customerList" 
-                      :key="c.id" 
-                      :label="c.name" 
-                      :value="c.id"
-                    />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="选择银行" prop="bank_id">
-                  <el-select 
-                    v-model="taskForm.bank_id" 
-                    placeholder="请选择银行" 
-                    style="width: 100%;"
-                    @change="onBankChange"
-                  >
-                    <el-option 
-                      v-for="b in bankList" 
-                      :key="b.id" 
-                      :label="b.name" 
-                      :value="b.id"
-                    />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="20">
-              <el-col :span="12">
-                <el-form-item label="单日所需金额" prop="total_amount">
-                  <el-input-number 
-                    v-model="taskForm.total_amount" 
-                    :min="2000" 
-                    :step="1000"
-                    :precision="0"
-                    :value-on-clear="30000"
-                    style="width: 100%;"
-                    @change="updateTaskName"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="任务日期" prop="task_date">
-                  <el-date-picker
-                    v-model="taskForm.task_date"
-                    type="date"
-                    placeholder="选择日期"
-                    format="YYYY-MM-DD"
-                    value-format="YYYY-MM-DD"
-                    style="width: 100%;"
-                    @change="updateTaskName"
-                  />
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="20">
-              <el-col :span="12">
-                <el-form-item label="每次最低金额" prop="alloc_min">
-                  <el-input-number 
-                    v-model="taskForm.alloc_min" 
-                    :min="100" 
-                    :step="100"
-                    :precision="0"
-                    style="width: 100%;"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="每次最高金额" prop="alloc_max">
-                  <el-input-number 
-                    v-model="taskForm.alloc_max" 
-                    :min="100" 
-                    :step="100"
-                    :precision="0"
-                    style="width: 100%;"
-                  />
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-form-item>
-              <el-button type="primary" @click="createTask(false)" :loading="creating" size="large">
-                创建并智能分配
-              </el-button>
-              <el-button type="danger" @click="createTask(true)" :loading="creating" size="large">
-                强制分配
-              </el-button>
-              <el-button @click="resetForm" size="large">重置</el-button>
-            </el-form-item>
-          </el-form>
-
-          <el-divider />
-
-          <div class="allocation-preview" v-if="allocationResult">
-            <h4>分配预览</h4>
-            <el-alert 
-              :title="`共分配 ${allocationResult.allocated_count} 条任务，剩余 ¥${Math.round(allocationResult.remaining_amount || 0)} 未分配`" 
-              :type="allocationResult.remaining_amount > 0 ? 'warning' : 'success'"
-              show-icon
-              :closable="false"
-              style="margin-bottom: 15px;"
-            />
-            
-            <el-table :data="allocationDetails" max-height="300" size="small">
-              <el-table-column prop="person_name" label="人员" width="100" />
-              <el-table-column prop="task_date" label="日期" width="120" />
-              <el-table-column prop="amount" label="金额" width="100">
-                <template #default="{ row }">
-                  <span style="color: #409eff; font-weight: bold;">¥{{ Math.round(row.amount) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="card_no" label="卡号" width="120">
-                <template #default="{ row }">
-                  ****{{ row.card_no }}
-                </template>
-              </el-table-column>
-            </el-table>
+    <div class="top-row">
+      <el-card class="form-card">
+        <template #header>
+          <div class="card-header">
+            <span>创建转账任务</span>
           </div>
-        </el-card>
-      </div>
+        </template>
 
-      <div class="right-column">
-        <el-card class="info-card">
-          <template #header>
-            <span>可用人员 ({{ personList.length }}人)</span>
-          </template>
-          <div class="person-list">
-            <el-tag 
-              v-for="p in personList" 
-              :key="p.id"
-              :type="getPersonTagType(p)"
-              :effect="unselectedPersonIds.has(p.id) ? 'dark' : 'plain'"
-              @click="togglePerson(p.id)"
-              class="clickable-tag person-tag"
-              :title="getPersonStatusTip(p)"
-            >{{ p.code }} - {{ p.name }}</el-tag>
+        <el-form :model="taskForm" label-width="100px" :rules="rules" ref="formRef" size="default">
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="选择客户" prop="customer_id">
+                <el-select 
+                  v-model="taskForm.customer_id" 
+                  placeholder="请选择客户" 
+                  style="width: 100%;"
+                  @change="onCustomerChange"
+                >
+                  <el-option 
+                    v-for="c in customerList" 
+                    :key="c.id" 
+                    :label="c.name" 
+                    :value="c.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="选择银行" prop="bank_id">
+                <el-select 
+                  v-model="taskForm.bank_id" 
+                  placeholder="请选择银行" 
+                  style="width: 100%;"
+                  @change="onBankChange"
+                >
+                  <el-option 
+                    v-for="b in bankList" 
+                    :key="b.id" 
+                    :label="b.name" 
+                    :value="b.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="任务日期" prop="task_date">
+                <el-date-picker
+                  v-model="taskForm.task_date"
+                  type="date"
+                  placeholder="选择日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  style="width: 100%;"
+                  @change="loadPersonStatusByCard"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="所需金额" prop="total_amount">
+                <el-input-number 
+                  v-model="taskForm.total_amount" 
+                  :min="2000" 
+                  :step="1000"
+                  :precision="0"
+                  :value-on-clear="30000"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="最低金额" prop="alloc_min">
+                <el-input-number 
+                  v-model="taskForm.alloc_min" 
+                  :min="100" 
+                  :step="100"
+                  :precision="0"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="最高金额" prop="alloc_max">
+                <el-input-number 
+                  v-model="taskForm.alloc_max" 
+                  :min="100" 
+                  :step="100"
+                  :precision="0"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-form-item>
+            <el-button type="primary" @click="createTask(false)" :loading="creating">
+              创建并智能分配
+            </el-button>
+            <el-button type="danger" @click="createTask(true)" :loading="creating">
+              强制分配
+            </el-button>
+            <el-button @click="resetForm">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
+
+      <el-card class="stats-card">
+        <template #header>
+          <span>任务统计</span>
+        </template>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-value">{{ personList.length }}</div>
+            <div class="stat-label">总人数</div>
           </div>
-        </el-card>
-
-        <el-card class="stats-card" style="margin-top: 20px;">
-          <template #header>
-            <span>任务统计</span>
-          </template>
-          <div class="stats-grid">
-            <div class="stat-item">
-              <div class="stat-value">{{ personList.length }}</div>
-              <div class="stat-label">总人数</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value available">{{ availablePersonCount }}</div>
-              <div class="stat-label">可用人数</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value participating">{{ participatingPersonCount }}</div>
-              <div class="stat-label">参与人数</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value excluded">{{ unselectedPersonIds.size }}</div>
-              <div class="stat-label">排除人数</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value skipped">{{ skippedPersonCount }}</div>
-              <div class="stat-label">跳过人数</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value amount">¥{{ taskForm.total_amount.toLocaleString() }}</div>
-              <div class="stat-label">总金额</div>
-            </div>
+          <div class="stat-item">
+            <div class="stat-value available">{{ availablePersonCount }}</div>
+            <div class="stat-label">可用人数</div>
           </div>
-        </el-card>
-
-      </div>
+          <div class="stat-item">
+            <div class="stat-value participating">{{ participatingPersonCount }}</div>
+            <div class="stat-label">参与人数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value excluded">{{ unselectedPersonIds.size }}</div>
+            <div class="stat-label">排除人数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value skipped">{{ skippedPersonCount }}</div>
+            <div class="stat-label">跳过人数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value amount">¥{{ taskForm.total_amount.toLocaleString() }}</div>
+            <div class="stat-label">总金额</div>
+          </div>
+        </div>
+      </el-card>
     </div>
 
-    <el-card style="margin-top: 20px;">
+    <div class="middle-row">
+      <el-card class="person-status-card">
+        <template #header>
+          <span>人员可用状态</span>
+        </template>
+        <div class="person-status-container">
+          <div v-for="customer in personStatusByCard" :key="customer.customer_id" class="customer-section">
+            <div class="customer-title" :style="{ color: customer.customer_color }">
+              {{ customer.customer_name }}
+            </div>
+            <div class="banks-row">
+              <div v-for="bank in customer.banks" :key="bank.bank_id" class="bank-section">
+                <div class="bank-title">{{ bank.bank_name }}</div>
+                <div class="bank-persons">
+                  <div class="persons-row">
+                    <span class="persons-label available">可用 ({{ bank.available_persons.length }})</span>
+                    <div class="tags-group">
+                      <el-tag 
+                        v-for="p in bank.available_persons" 
+                        :key="p.id"
+                        size="small"
+                        type="success"
+                        effect="plain"
+                        :title="p.reason || '可用'"
+                        class="person-tag"
+                      >{{ p.name }}</el-tag>
+                      <span v-if="bank.available_persons.length === 0" class="no-data">暂无</span>
+                    </div>
+                  </div>
+                  <div class="persons-row" v-if="bank.blocked_persons.length > 0">
+                    <span class="persons-label blocked">不可用 ({{ bank.blocked_persons.length }})</span>
+                    <div class="tags-group">
+                      <el-tag 
+                        v-for="p in bank.blocked_persons" 
+                        :key="p.id"
+                        size="small"
+                        type="danger"
+                        effect="plain"
+                        :title="p.reason"
+                        class="person-tag"
+                      >{{ p.name }}</el-tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
+      <el-card class="preview-card" v-if="allocationResult">
+        <template #header>
+          <span>分配预览</span>
+        </template>
+        <el-alert 
+          :title="`共分配 ${allocationResult.allocated_count} 条任务，剩余 ¥${Math.round(allocationResult.remaining_amount || 0)} 未分配`" 
+          :type="allocationResult.remaining_amount > 0 ? 'warning' : 'success'"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 15px;"
+        />
+        <el-table :data="allocationDetails" max-height="400" size="small">
+          <el-table-column prop="person_name" label="人员" width="100" />
+          <el-table-column prop="task_date" label="日期" width="120" />
+          <el-table-column prop="amount" label="金额" width="100">
+            <template #default="{ row }">
+              <span style="color: #409eff; font-weight: bold;">¥{{ Math.round(row.amount) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="card_no" label="卡号" width="120">
+            <template #default="{ row }">
+              ****{{ row.card_no }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
+    <el-card class="rules-card">
       <template #header>
         <div class="card-header">
           <span>执行规则</span>
         </div>
       </template>
-      <div class="rules-list">
+      <div class="rules-grid">
         <div class="rule-item">
           <span class="rule-number">1</span>
           <div class="rule-content">
@@ -269,6 +285,7 @@ const bankList = ref([])
 const personList = ref([])
 const unselectedPersonIds = ref(new Set())
 const personStatusList = ref([])
+const personStatusByCard = ref([])
 
 const skippedPersonCount = computed(() => {
   return personStatusList.value.filter(s => s.status === 'blocked').length
@@ -287,7 +304,6 @@ const participatingPersonCount = computed(() => {
 const creating = ref(false)
 
 const taskForm = ref({
-  task_name: '',
   customer_id: '',
   bank_id: '',
   total_amount: 30000,
@@ -301,14 +317,13 @@ const allocationResult = ref(null)
 const allocationDetails = ref([])
 
 const rules = {
-  task_name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   customer_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
   bank_id: [{ required: true, message: '请选择银行', trigger: 'change' }],
   total_amount: [{ required: true, message: '请输入转账金额', trigger: 'blur' }]
 }
 
 onMounted(async () => {
-  await Promise.all([loadCustomers(), loadBanks(), loadPersons(), loadTaskList()])
+  await Promise.all([loadCustomers(), loadBanks(), loadPersons(), loadPersonStatusByCard()])
 })
 
 async function loadCustomers() {
@@ -347,35 +362,11 @@ async function loadPersons() {
   }
 }
 
-function updateTaskName() {
-  const customer = customerList.value.find(c => c.id === taskForm.value.customer_id)
-  const bank = bankList.value.find(b => b.id === taskForm.value.bank_id)
-  const date = taskForm.value.task_date
-  
-  let name = ''
-  if (customer) {
-    name += customer.name
-  }
-  if (bank) {
-    name += `-${bank.name}`
-  }
-  if (taskForm.value.total_amount) {
-    name += `-${taskForm.value.total_amount}`
-  }
-  if (date) {
-    name += `-${date}`
-  }
-  
-  taskForm.value.task_name = name
-}
-
 function onBankChange() {
-  updateTaskName()
   checkPersonStatus()
 }
 
 function onCustomerChange() {
-  updateTaskName()
   checkPersonStatus()
 }
 
@@ -395,6 +386,18 @@ async function checkPersonStatus() {
   } catch (e) {
     console.error(e)
     personStatusList.value = []
+  }
+}
+
+async function loadPersonStatusByCard() {
+  try {
+    const res = await axios.get('/api/task/person-status-by-card', {
+      params: { task_date: taskForm.value.task_date }
+    })
+    personStatusByCard.value = res.data.data || []
+  } catch (e) {
+    console.error(e)
+    personStatusByCard.value = []
   }
 }
 
@@ -440,7 +443,6 @@ async function createTask(forceAllocate = false) {
 
 function resetForm() {
   taskForm.value = {
-    task_name: '',
     customer_id: '',
     bank_id: '',
     total_amount: 30000,
@@ -488,43 +490,42 @@ function getStatusText(status) {
 </script>
 
 <style scoped>
-.main-layout {
-  display: flex;
-  gap: 20px;
-}
-
-.left-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.left-column .main-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.left-column .main-card :deep(.el-card__body) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.left-column .main-card :deep(.el-card__body) > *:last-child {
-  margin-top: auto;
-}
-
-.right-column {
-  width: 48%;
+.transfer-task {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-.right-column .info-card,
-.right-column .stats-card {
-  flex-shrink: 0;
+.top-row {
+  display: flex;
+  gap: 20px;
+}
+
+.form-card {
+  flex: 2;
+}
+
+.stats-card {
+  flex: 1;
+  min-width: 320px;
+}
+
+.middle-row {
+  display: flex;
+  gap: 20px;
+}
+
+.person-status-card {
+  flex: 2;
+}
+
+.preview-card {
+  flex: 1;
+  min-width: 360px;
+}
+
+.rules-card {
+  margin-top: 0;
 }
 
 .card-header {
@@ -533,8 +534,87 @@ function getStatusText(status) {
   align-items: center;
 }
 
-.info-card {
-  height: fit-content;
+.person-status-container {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.customer-section {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.customer-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.customer-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.banks-row {
+  display: flex;
+  gap: 20px;
+  padding-left: 10px;
+}
+
+.bank-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.bank-title {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.bank-persons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.persons-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.persons-label {
+  font-size: 12px;
+  min-width: 70px;
+  flex-shrink: 0;
+  line-height: 20px;
+}
+
+.persons-label.available {
+  color: #67c23a;
+}
+
+.persons-label.blocked {
+  color: #f56c6c;
+}
+
+.tags-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1;
+}
+
+.no-data {
+  color: #c0c4cc;
+  font-size: 12px;
+}
+
+.person-tag {
+  margin: 0;
 }
 
 .person-list {
@@ -552,19 +632,15 @@ function getStatusText(status) {
   transform: scale(1.05);
 }
 
-.stats-card {
-  height: fit-content;
-}
-
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
+  gap: 12px;
 }
 
-.rules-list {
+.rules-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 15px;
 }
 
@@ -610,13 +686,13 @@ function getStatusText(status) {
 
 .stat-item {
   text-align: center;
-  padding: 10px;
+  padding: 10px 6px;
   background: #f8f9fa;
   border-radius: 8px;
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: bold;
   color: #606266;
 }
@@ -639,12 +715,18 @@ function getStatusText(status) {
 
 .stat-value.amount {
   color: #409eff;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .stat-label {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+.allocation-preview h4 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: #303133;
 }
 </style>

@@ -10,6 +10,13 @@
 
       <el-table :data="personList" stripe style="width: 100%">
         <el-table-column prop="name" label="姓名" width="200" />
+        <el-table-column prop="status" label="状态" width="150">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+              {{ row.status === 1 ? '可用' : '不可用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" fixed="right" width="200">
           <template #default="{ row }">
             <el-button size="small" @click="editPerson(row)">编辑</el-button>
@@ -23,6 +30,12 @@
       <el-form :model="form" label-width="120px">
         <el-form-item label="姓名" required>
           <el-input v-model="form.name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="状态" required>
+          <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%;">
+            <el-option label="可用" :value="1" />
+            <el-option label="不可用" :value="0" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -44,7 +57,8 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const form = ref({
-  name: ''
+  name: '',
+  status: 1
 })
 
 onMounted(loadPersonList)
@@ -62,7 +76,8 @@ function showAddDialog() {
   isEdit.value = false
   editId.value = null
   form.value = {
-    name: ''
+    name: '',
+    status: 1
   }
   dialogVisible.value = true
 }

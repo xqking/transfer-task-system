@@ -6,12 +6,13 @@ person_bp = Blueprint('person', __name__)
 @person_bp.route('/list', methods=['GET'])
 def get_person_list():
     from models import Person
-    persons = Person.query.filter_by(status=1).order_by(Person.id).all()
+    persons = Person.query.order_by(Person.id).all()
     return jsonify({
         'code': 200,
         'data': [{
             'id': p.id,
             'name': p.name,
+            'status': p.status,
             'daily_limit': p.daily_limit
         } for p in persons]
     })
@@ -39,6 +40,7 @@ def add_person():
     person = Person(
         code=f'P{max_id + 1:03d}',
         name=name,
+        status=data.get('status', 1),
         daily_limit=data.get('daily_limit', 6000)
     )
     db.session.add(person)
@@ -52,6 +54,8 @@ def update_person(id):
     person = Person.query.get(id)
     if person:
         person.name = data.get('name', person.name)
+        if 'status' in data:
+            person.status = data['status']
         person.daily_limit = data.get('daily_limit', person.daily_limit)
         db.session.commit()
         return jsonify({'code': 200, 'message': '更新成功'})

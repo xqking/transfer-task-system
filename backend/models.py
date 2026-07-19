@@ -49,7 +49,7 @@ class TransferTask(db.Model):
     __tablename__ = 'transfer_tasks'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    task_name = db.Column(db.String(100), nullable=False, comment='任务名称')
+    task_name = db.Column(db.String(100), comment='任务名称')
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
     bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=False)
     total_amount = db.Column(db.Float, nullable=False, comment='任务总金额')
