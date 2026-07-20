@@ -228,13 +228,6 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="来源" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.remark && row.remark !== '-' ? 'primary' : 'success'" size="small">
-              {{ row.remark && row.remark !== '-' ? '手动' : '自动' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="200" />
         <el-table-column label="操作" width="80">
           <template #default="{ row }">
