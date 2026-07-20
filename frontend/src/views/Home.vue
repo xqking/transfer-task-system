@@ -267,29 +267,33 @@
             </div>
             <div class="card-right">
               <div class="card-info">
-                <div class="info-row">
-                  <span class="info-label">客户：</span>
-                  <span class="info-value customer-value" :style="{ color: getCustomerColor(task.customer_name) }">{{ task.customer_name }}</span>
+                <div class="info-group">
+                  <div class="info-row">
+                    <span class="info-label">客户</span>
+                    <span class="info-value customer-value" :style="{ color: getCustomerColor(task.customer_name) }">{{ task.customer_name }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">银行</span>
+                    <span class="info-value">{{ task.bank_name.replace('银行', '') }}</span>
+                  </div>
                 </div>
-                <div class="info-row">
-                  <span class="info-label">银行：</span>
-                  <span class="info-value">{{ task.bank_name.replace('银行', '') }}</span>
+                <div class="info-divider"></div>
+                <div class="info-group amounts">
+                  <div class="info-row">
+                    <span class="info-label">微信</span>
+                    <span class="info-value wechat-value">¥{{ ((task.wechat_amount || 0) + (task.alipay_amount || 0) > 0 && (task.wechat_amount || 0) + (task.alipay_amount || 0) === Math.round(task.amount)) ? (task.wechat_amount || 0) : getSplitAmount(task, 1) }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">支付宝</span>
+                    <span class="info-value alipay-value">¥{{ ((task.wechat_amount || 0) + (task.alipay_amount || 0) > 0 && (task.wechat_amount || 0) + (task.alipay_amount || 0) === Math.round(task.amount)) ? (task.alipay_amount || 0) : (Math.round(task.amount) - getSplitAmount(task, 1)) }}</span>
+                  </div>
                 </div>
-                <div class="info-row">
-                  <span class="info-label">微信：</span>
-                  <span class="info-value wechat-value">¥{{ ((task.wechat_amount || 0) + (task.alipay_amount || 0) > 0 && (task.wechat_amount || 0) + (task.alipay_amount || 0) === Math.round(task.amount)) ? (task.wechat_amount || 0) : getSplitAmount(task, 1) }}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">支付宝：</span>
-                  <span class="info-value alipay-value">¥{{ ((task.wechat_amount || 0) + (task.alipay_amount || 0) > 0 && (task.wechat_amount || 0) + (task.alipay_amount || 0) === Math.round(task.amount)) ? (task.alipay_amount || 0) : (Math.round(task.amount) - getSplitAmount(task, 1)) }}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">日期：</span>
-                  <span class="info-value">{{ task.task_date }}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">状态：</span>
-                  <span class="info-value status-tag" :class="getStatusClass(task.status)">{{ getStatusText(task.status) }}</span>
+                <div class="info-divider"></div>
+                <div class="info-group">
+                  <div class="info-row">
+                    <span class="info-label">日期</span>
+                    <span class="info-value">{{ task.task_date }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1385,6 +1389,7 @@ function exportExcel() {
 
 .task-card {
   display: flex;
+  align-items: stretch;
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
@@ -1425,30 +1430,59 @@ function exportExcel() {
 
 .card-right {
   flex: 1;
-  padding: 16px;
+  padding: 20px;
   background: #fff8f0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 
 .card-info {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 300px;
+}
+
+.info-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.info-group.amounts {
   gap: 10px;
+  padding: 10px 0;
+}
+
+.info-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 2px 0;
 }
 
 .info-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  font-size: 14px;
 }
 
 .info-label {
-  color: #999;
-  min-width: 50px;
+  color: #888;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .info-value {
   color: #333;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.info-group.amounts .info-value {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .customer-value {
@@ -1464,9 +1498,9 @@ function exportExcel() {
 }
 
 .status-tag {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 14px;
 }
 
 .status-pending {
