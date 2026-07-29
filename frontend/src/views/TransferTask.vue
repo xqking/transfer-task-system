@@ -10,7 +10,7 @@
 
         <el-form :model="taskForm" label-width="100px" :rules="rules" ref="formRef" size="default">
           <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :span="8">
               <el-form-item label="选择客户" prop="customer_id">
                 <el-select 
                   v-model="taskForm.customer_id" 
@@ -27,7 +27,24 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="8">
+              <el-form-item label="选择银行" prop="bank_id">
+                <el-select 
+                  v-model="taskForm.bank_id" 
+                  placeholder="请选择银行" 
+                  style="width: 100%;"
+                  @change="onBankChange"
+                >
+                  <el-option 
+                    v-for="b in bankList" 
+                    :key="b.id" 
+                    :label="b.name" 
+                    :value="b.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
               <el-form-item label="任务日期" prop="task_date">
                 <el-date-picker
                   v-model="taskForm.task_date"
@@ -130,43 +147,43 @@
           <span>人员可用状态</span>
         </template>
         <div class="person-status-container">
-          <div v-if="!taskForm.customer_id" class="no-data-tip">请先选择客户</div>
-          <div v-else-if="personStatusList.length === 0" class="no-data-tip">加载中...</div>
-          <div v-else>
-            <div class="customer-info" v-if="customerList.find(c => c.id === taskForm.customer_id)">
-              <span class="customer-name" :style="{ color: customerList.find(c => c.id === taskForm.customer_id)?.color }">
-                {{ customerList.find(c => c.id === taskForm.customer_id)?.name }}
-              </span>
-              <span class="customer-desc">（负责该客户的所有银行卡任务）</span>
+          <div v-for="customer in personStatusByCard" :key="customer.customer_id" class="customer-section">
+            <div class="customer-title" :style="{ color: customer.customer_color }">
+              {{ customer.customer_name }}
             </div>
-            <div class="persons-section">
-              <div class="persons-row">
-                <span class="persons-label available">可用 ({{ personStatusList.filter(p => p.status === 'available').length }})</span>
-                <div class="tags-group">
-                  <el-tag 
-                    v-for="p in personStatusList.filter(p => p.status === 'available')" 
-                    :key="p.id"
-                    size="small"
-                    type="success"
-                    effect="plain"
-                    :title="p.reason || '可用'"
-                    class="person-tag"
-                  >{{ p.name }}</el-tag>
-                  <span v-if="personStatusList.filter(p => p.status === 'available').length === 0" class="no-data">暂无可用人员</span>
-                </div>
-              </div>
-              <div class="persons-row" v-if="personStatusList.filter(p => p.status === 'blocked').length > 0">
-                <span class="persons-label blocked">不可用 ({{ personStatusList.filter(p => p.status === 'blocked').length }})</span>
-                <div class="tags-group">
-                  <el-tag 
-                    v-for="p in personStatusList.filter(p => p.status === 'blocked')" 
-                    :key="p.id"
-                    size="small"
-                    type="danger"
-                    effect="plain"
-                    :title="p.reason"
-                    class="person-tag"
-                  >{{ p.name }}</el-tag>
+            <div class="banks-row">
+              <div v-for="bank in customer.banks" :key="bank.bank_id" class="bank-section">
+                <div class="bank-title">{{ bank.bank_name }}</div>
+                <div class="bank-persons">
+                  <div class="persons-row">
+                    <span class="persons-label available">可用 ({{ bank.available_persons.length }})</span>
+                    <div class="tags-group">
+                      <el-tag 
+                        v-for="p in bank.available_persons" 
+                        :key="p.id"
+                        size="small"
+                        type="success"
+                        effect="plain"
+                        :title="p.reason || '可用'"
+                        class="person-tag"
+                      >{{ p.name }}</el-tag>
+                      <span v-if="bank.available_persons.length === 0" class="no-data">暂无</span>
+                    </div>
+                  </div>
+                  <div class="persons-row" v-if="bank.blocked_persons.length > 0">
+                    <span class="persons-label blocked">不可用 ({{ bank.blocked_persons.length }})</span>
+                    <div class="tags-group">
+                      <el-tag 
+                        v-for="p in bank.blocked_persons" 
+                        :key="p.id"
+                        size="small"
+                        type="danger"
+                        effect="plain"
+                        :title="p.reason"
+                        class="person-tag"
+                      >{{ p.name }}</el-tag>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -179,27 +196,18 @@
           <span>分配预览</span>
         </template>
         <el-alert 
-          :title="`已分配给 ${allocationResult.selected_person} 负责 ${allocationResult.customer_name} 的 ${allocationResult.card_count} 张银行卡任务`" 
-          type="success"
+          :title="`共分配 ${allocationResult.allocated_count} 条任务，剩余 ¥${Math.round(allocationResult.remaining_amount || 0)} 未分配`" 
+          :type="allocationResult.remaining_amount > 0 ? 'warning' : 'success'"
           show-icon
           :closable="false"
           style="margin-bottom: 15px;"
         />
-        <el-descriptions title="分配详情" :column="1" border size="small">
-          <el-descriptions-item label="负责人">
-            <span style="font-weight: bold; color: #409eff;">{{ allocationResult.selected_person }}</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="客户">{{ allocationResult.customer_name }}</el-descriptions-item>
-          <el-descriptions-item label="银行卡数量">{{ allocationResult.card_count }} 张</el-descriptions-item>
-          <el-descriptions-item label="总金额">
-            <span style="color: #f56c6c; font-weight: bold; font-size: 16px;">¥{{ Math.round(taskForm.total_amount).toLocaleString() }}</span>
-          </el-descriptions-item>
-        </el-descriptions>
-        <el-divider content-position="left">银行卡明细</el-divider>
-        <el-table :data="allocationDetails" max-height="300" size="small">
-          <el-table-column prop="bank_name" label="银行" width="120">
+        <el-table :data="allocationDetails" max-height="400" size="small">
+          <el-table-column prop="person_name" label="人员" width="100" />
+          <el-table-column prop="task_date" label="日期" width="120" />
+          <el-table-column prop="amount" label="金额" width="100">
             <template #default="{ row }">
-              {{ row.bank_name?.replace('银行', '') }}
+              <span style="color: #409eff; font-weight: bold;">¥{{ Math.round(row.amount) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="card_no" label="卡号" width="120">
@@ -207,15 +215,7 @@
               ****{{ row.card_no }}
             </template>
           </el-table-column>
-          <el-table-column prop="amount" label="金额" width="120">
-            <template #default="{ row }">
-              <span style="color: #409eff; font-weight: bold;">¥{{ Math.round(row.amount) }}</span>
-            </template>
-          </el-table-column>
         </el-table>
-        <div style="margin-top: 15px; text-align: right; font-size: 14px; color: #666;">
-          合计 <span style="color: #f56c6c; font-weight: bold; font-size: 16px;">¥{{ Math.round(taskForm.total_amount).toLocaleString() }}</span>
-        </div>
       </el-card>
     </div>
 
@@ -229,43 +229,43 @@
         <div class="rule-item">
           <span class="rule-number">1</span>
           <div class="rule-content">
-            <div class="rule-title">按客户分配</div>
-            <div class="rule-desc">一个人负责一个客户的所有银行卡（建设+工商）任务</div>
-          </div>
-        </div>
-        <div class="rule-item">
-          <span class="rule-number">2</span>
-          <div class="rule-content">
             <div class="rule-title">金额限制</div>
             <div class="rule-desc">每人每次最低分配 ¥2000，每日累计最高 ¥20000</div>
           </div>
         </div>
         <div class="rule-item">
-          <span class="rule-number">3</span>
+          <span class="rule-number">2</span>
           <div class="rule-content">
             <div class="rule-title">金额格式</div>
             <div class="rule-desc">金额不能以"00"结尾（个位数和十位数都不能为0）</div>
           </div>
         </div>
         <div class="rule-item">
-          <span class="rule-number">4</span>
+          <span class="rule-number">3</span>
           <div class="rule-content">
             <div class="rule-title">连续分配限制</div>
-            <div class="rule-desc">同一个人给同一个客户连续分配2天后，第3天自动跳过</div>
+            <div class="rule-desc">同一个人给同一张卡连续分配2天后，第3天自动跳过</div>
           </div>
         </div>
         <div class="rule-item">
-          <span class="rule-number">5</span>
+          <span class="rule-number">4</span>
           <div class="rule-content">
             <div class="rule-title">客户数量限制</div>
             <div class="rule-desc">一个人每天最多接2个不同客户的任务</div>
           </div>
         </div>
         <div class="rule-item">
+          <span class="rule-number">5</span>
+          <div class="rule-content">
+            <div class="rule-title">银行卡额度</div>
+            <div class="rule-desc">每张银行卡每天累计分配最高 ¥60000</div>
+          </div>
+        </div>
+        <div class="rule-item">
           <span class="rule-number">6</span>
           <div class="rule-content">
-            <div class="rule-title">强制分配</div>
-            <div class="rule-desc">当没有符合条件的人员时，可以强制分配</div>
+            <div class="rule-title">每日一人一次</div>
+            <div class="rule-desc">同一个人每天只能被分配一次任务</div>
           </div>
         </div>
       </div>
@@ -305,6 +305,7 @@ const creating = ref(false)
 
 const taskForm = ref({
   customer_id: '',
+  bank_id: '',
   total_amount: 30000,
   task_date: new Date().toISOString().slice(0, 10),
   alloc_min: 2000,
@@ -317,17 +318,27 @@ const allocationDetails = ref([])
 
 const rules = {
   customer_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
+  bank_id: [{ required: true, message: '请选择银行', trigger: 'change' }],
   total_amount: [{ required: true, message: '请输入转账金额', trigger: 'blur' }]
 }
 
 onMounted(async () => {
-  await Promise.all([loadCustomers(), loadPersons(), loadPersonStatusByCard()])
+  await Promise.all([loadCustomers(), loadBanks(), loadPersons(), loadPersonStatusByCard()])
 })
 
 async function loadCustomers() {
   try {
     const res = await axios.get('/api/customer/list')
     customerList.value = res.data.data || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function loadBanks() {
+  try {
+    const res = await axios.get('/api/customer/banks')
+    bankList.value = res.data.data || []
   } catch (e) {
     console.error(e)
   }
@@ -351,12 +362,16 @@ async function loadPersons() {
   }
 }
 
+function onBankChange() {
+  checkPersonStatus()
+}
+
 function onCustomerChange() {
   checkPersonStatus()
 }
 
 async function checkPersonStatus() {
-  if (!taskForm.value.customer_id) {
+  if (!taskForm.value.customer_id || !taskForm.value.bank_id) {
     personStatusList.value = []
     return
   }
@@ -364,6 +379,7 @@ async function checkPersonStatus() {
   try {
     const res = await axios.post('/api/task/check-person-status', {
       customer_id: taskForm.value.customer_id,
+      bank_id: taskForm.value.bank_id,
       task_date: taskForm.value.task_date
     })
     personStatusList.value = res.data.data || []
@@ -409,14 +425,9 @@ async function createTask(forceAllocate = false) {
     if (res.data.data && res.data.data.task_id) {
       const detailRes = await axios.get(`/api/task-detail/list/${res.data.data.task_id}`)
       allocationDetails.value = detailRes.data.data || []
-    } else if (res.data.data && res.data.data.preview) {
-      allocationDetails.value = res.data.data.preview
     }
 
-    ElMessage.success(`${res.data.message}`)
-    
-    // 刷新人员状态
-    loadPersonStatusByCard()
+    ElMessage.success(`任务创建成功！已分配 ${res.data.data.allocated_count} 条任务`)
   } catch (e) {
     const errData = e.response?.data?.data
     if (errData) {
@@ -528,51 +539,58 @@ function getStatusText(status) {
   overflow-y: auto;
 }
 
-.no-data-tip {
-  text-align: center;
-  color: #999;
-  padding: 40px 0;
-  font-size: 14px;
-}
-
-.customer-info {
+.customer-section {
   margin-bottom: 15px;
-  padding: 10px 15px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
 }
 
-.customer-name {
-  font-size: 18px;
+.customer-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.customer-title {
+  font-size: 16px;
   font-weight: bold;
+  margin-bottom: 10px;
 }
 
-.customer-desc {
-  font-size: 13px;
-  color: #999;
+.banks-row {
+  display: flex;
+  gap: 20px;
+  padding-left: 10px;
 }
 
-.persons-section {
+.bank-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.bank-title {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.bank-persons {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
 .persons-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .persons-label {
-  font-size: 13px;
-  min-width: 80px;
+  font-size: 12px;
+  min-width: 70px;
   flex-shrink: 0;
-  line-height: 24px;
-  font-weight: 500;
+  line-height: 20px;
 }
 
 .persons-label.available {
@@ -586,13 +604,13 @@ function getStatusText(status) {
 .tags-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   flex: 1;
 }
 
 .no-data {
   color: #c0c4cc;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .person-tag {

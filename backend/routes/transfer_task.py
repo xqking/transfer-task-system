@@ -17,28 +17,10 @@ def _parse_date(d):
         return datetime.strptime(d, '%Y-%m-%d').date()
     return d
 
-def can_assign_person_to_customer(person_id, customer_id, task_date, TaskDetail):
-    from datetime import timedelta
-    
-    # 检查今日客户数量限制
-    customer_count = TaskDetail.query.filter(
-        and_(
-            TaskDetail.person_id == person_id,
-            TaskDetail.task_date == task_date,
-            TaskDetail.status.in_(['pending', 'completed'])
-        )
-    ).join(TaskDetail.card).distinct(BankCard.customer_id).count()
-    
-    if customer_count >= MAX_CUSTOMERS_PER_PERSON:
-        return False, f'今日已分配{customer_count}个客户任务，达到上限{MAX_CUSTOMERS_PER_PERSON}个'
-    
-    # 检查连续分配限制
-    cards = BankCard.query.filter(BankCard.customer_id == customer_id, BankCard.status == 1).all()
-    for card in cards:
-        if has_consecutive_allocation(person_id, card.id, task_date, TaskDetail):
-            return False, f'已连续{MAX_CONSECUTIVE_DAYS}天分配客户的银行卡，今日跳过'
-    
-    return True, ''
+def can_assign_person(person_id, task_date, day_person_set, TaskDetail, pending_allocs, card_id=None):
+    if person_id in day_person_set:
+        return False
+    return True
 
 def has_consecutive_allocation(person_id, card_id, task_date, TaskDetail, max_consecutive=MAX_CONSECUTIVE_DAYS):
     from datetime import timedelta
@@ -117,105 +99,198 @@ def calc_amount(remaining, person, card_room, total_amount, alloc_min=None, allo
     
     return random.randint(mn, mx)
 
-def simulate_allocate_by_customer(total_amount, customer_id, persons, TaskDetail, task_date=None, alloc_min=None, alloc_max=None, force_allocate=False):
-    """按客户分配：一个人负责一个客户的所有银行卡任务"""
+def simulate_allocate(total_amount, cards, persons, TaskDetail, task_date=None, alloc_min=None, alloc_max=None, force_allocate=False):
     allocations = []
+    remaining = int(total_amount)
     task_date = task_date or datetime.now().date()
+    
     alloc_min_val, alloc_max_val = get_alloc_limits(total_amount, alloc_min, alloc_max)
-    
-    # 获取客户的所有银行卡
-    cards = BankCard.query.filter(BankCard.customer_id == customer_id, BankCard.status == 1).all()
-    if not cards:
-        return [], total_amount, {'error': '该客户没有可用的银行卡'}
-    
-    if len(cards) == 0:
-        return [], total_amount, {'error': '该客户没有可用的银行卡'}
+
+    day_cap = len(persons)
+    day_persons = set()
     
     debug_info = {
         'task_date': task_date.strftime('%Y-%m-%d'),
-        'customer_id': customer_id,
-        'customer_cards': len(cards),
-        'total_amount': total_amount,
-        'allocations': [],
-        'skipped_reasons': []
+        'total_cards': len(cards),
+        'total_persons': len(persons),
+        'day_cap': day_cap,
+        'skipped_persons': [],
+        'card_details': []
     }
-    
-    # 为每个银行卡分配金额（按比例或平均分配）
-    if len(cards) == 1:
-        # 只有一张卡，全部金额给这张卡
-        card_amounts = {cards[0].id: total_amount}
-    else:
-        # 两张卡，按比例分配（各一半或按额度）
-        half = total_amount // 2
-        remainder = total_amount - half
-        card_amounts = {
-            cards[0].id: half,
-            cards[1].id: remainder
-        }
-    
-    # 找到第一个可用的人员
-    selected_person = None
-    shuffled = list(persons)
-    random.shuffle(shuffled)
-    
-    for person in shuffled:
-        is_available, reason = can_assign_person_to_customer(person.id, customer_id, task_date, TaskDetail)
-        if is_available or force_allocate:
-            selected_person = person
-            if not is_available:
-                debug_info['skipped_reasons'].append(f'强制分配给 {person.name}: {reason}')
-            break
-        else:
-            debug_info['skipped_reasons'].append(f'{person.name}: {reason}')
-    
-    if not selected_person:
-        return [], total_amount, debug_info
-    
-    # 为选中的人员创建所有银行卡的分配记录
+
     for card in cards:
-        amount = card_amounts.get(card.id, 0)
-        if amount <= 0:
-            continue
+        if remaining <= 0:
+            break
+        card_used_today = sum(
+            a['amount'] for a in allocations
+            if a['card_id'] == card.id and _parse_date(a['task_date']) == task_date
+        )
+        card_room = 60000 - card_used_today
         
-        # 确保金额有效
-        valid_amount = amount
-        if not is_valid_amount(valid_amount) and valid_amount >= alloc_min_val:
-            # 调整为有效金额
-            for delta in range(1, 100):
-                for sign in [-1, 1]:
-                    adjusted = valid_amount + sign * delta
-                    if adjusted >= alloc_min_val and is_valid_amount(adjusted):
-                        valid_amount = adjusted
-                        break
-                if is_valid_amount(valid_amount):
+        card_debug = {
+            'card_no': card.card_no[-4:],
+            'card_room': card_room,
+            'assigned_count': 0,
+            'skipped_reasons': {}
+        }
+
+        shuffled = list(persons)
+        random.shuffle(shuffled)
+
+        for person in shuffled:
+            if remaining <= 0:
+                break
+            if len(day_persons) >= day_cap:
+                card_debug['skipped_reasons']['day_cap_reached'] = f'已达到每日上限{day_cap}人'
+                break
+            if card_room < alloc_min_val:
+                card_debug['skipped_reasons']['card_full'] = f'卡额度不足(剩余{card_room}<{alloc_min_val})'
+                break
+
+            used_by_person = sum(a['amount'] for a in allocations if a['person_id'] == person.id)
+            if used_by_person >= alloc_max_val:
+                continue
+
+            person_remaining = alloc_max_val - used_by_person
+            if person_remaining < alloc_min_val:
+                continue
+
+            if has_consecutive_allocation(person.id, card.id, task_date, TaskDetail):
+                if not force_allocate:
+                    card_debug['skipped_reasons'][f'person_{person.id}'] = f'人员{person.name}已连续{MAX_CONSECUTIVE_DAYS}天分配此卡，今日跳过'
+                    continue
+
+            customer_count = TaskDetail.query.filter(
+                and_(
+                    TaskDetail.person_id == person.id,
+                    TaskDetail.task_date == task_date,
+                    TaskDetail.status.in_(['pending', 'completed'])
+                )
+            ).join(TaskDetail.card).distinct(BankCard.customer_id).count()
+            
+            if customer_count >= MAX_CUSTOMERS_PER_PERSON:
+                if not force_allocate:
+                    card_debug['skipped_reasons'][f'person_{person.id}'] = f'人员{person.name}今日已分配{customer_count}个客户任务，达到上限{MAX_CUSTOMERS_PER_PERSON}个'
+                    continue
+
+            max_possible = min(person_remaining, remaining, card_room, alloc_max_val)
+            
+            if max_possible < alloc_min_val:
+                continue
+
+            if remaining <= alloc_max_val:
+                target_amount = remaining
+            else:
+                target_amount = max_possible
+            
+            target_amount = min(target_amount, max_possible)
+            target_amount = max(target_amount, alloc_min_val)
+
+            candidates = []
+            search_low = max(alloc_min_val, target_amount - 1000)
+            for a in range(target_amount, search_low - 1, -1):
+                if a < alloc_min_val:
                     break
-        
-        if valid_amount >= alloc_min_val:
-            allocation = {
-                'person_id': selected_person.id,
-                'person_name': selected_person.name,
+                if is_valid_amount(a):
+                    remaining_after = remaining - a
+                    if remaining_after == 0 or remaining_after >= alloc_min_val:
+                        candidates.append(a)
+                        if len(candidates) >= 15:
+                            break
+            
+            if not candidates:
+                for a in range(min(target_amount, alloc_max_val), alloc_min_val - 1, -1):
+                    if is_valid_amount(a):
+                        remaining_after = remaining - a
+                        if remaining_after == 0 or remaining_after >= alloc_min_val:
+                            candidates.append(a)
+                            if len(candidates) >= 15:
+                                break
+            
+            if candidates:
+                amount = candidates[random.randint(0, min(8, len(candidates)) - 1)]
+            else:
+                valid_amounts = [a for a in range(alloc_min_val, min(target_amount, alloc_max_val) + 1) if is_valid_amount(a)]
+                if valid_amounts:
+                    amount = valid_amounts[-1]
+                else:
+                    continue
+
+            allocations.append({
+                'person_id': person.id,
+                'person_name': person.name,
                 'card_id': card.id,
                 'card_no': card.card_no[-4:],
-                'bank_id': card.bank_id,
-                'bank_name': Bank.query.get(card.bank_id).name if card.bank_id else '',
-                'amount': valid_amount,
+                'amount': amount,
                 'task_date': task_date.strftime('%Y-%m-%d')
-            }
-            allocations.append(allocation)
-            bank_name = Bank.query.get(card.bank_id).name if card.bank_id else ''
-            debug_info['allocations'].append({
-                'person_name': selected_person.name,
-                'card_no': card.card_no[-4:],
-                'bank_name': bank_name,
-                'amount': valid_amount
             })
-    
-    total_allocated = sum(a['amount'] for a in allocations)
-    remaining = total_amount - total_allocated
+            day_persons.add(person.id)
+            card_room -= amount
+            remaining -= amount
+            card_debug['assigned_count'] += 1
+        
+        debug_info['card_details'].append(card_debug)
+
     debug_info['remaining'] = remaining
     debug_info['allocated_count'] = len(allocations)
-    debug_info['selected_person'] = selected_person.name
-    
+
+    if remaining > 0:
+        alloc_with_room = [a for a in allocations if a['amount'] < alloc_max_val]
+        alloc_with_room.sort(key=lambda x: x['amount'])
+        while remaining > 0 and alloc_with_room:
+            alloc = alloc_with_room.pop(0)
+            
+            max_add = alloc_max_val - alloc['amount']
+            if max_add <= 0:
+                continue
+            
+            add_amount = min(remaining, max_add)
+            
+            new_amount = alloc['amount'] + add_amount
+            while not is_valid_amount(new_amount) and add_amount > 0:
+                add_amount -= 1
+                new_amount = alloc['amount'] + add_amount
+            
+            if is_valid_amount(new_amount) and add_amount > 0:
+                alloc['amount'] = new_amount
+                remaining -= add_amount
+
+    if remaining > 0 and remaining >= alloc_min_val:
+        for card in cards:
+            if remaining <= 0:
+                break
+            card_used = sum(a['amount'] for a in allocations if a['card_id'] == card.id)
+            card_room = 60000 - card_used
+            if card_room < alloc_min_val:
+                continue
+            
+            for person in persons:
+                if remaining <= 0:
+                    break
+                used_by_person = sum(a['amount'] for a in allocations if a['person_id'] == person.id)
+                person_remaining = alloc_max_val - used_by_person
+                if person_remaining < alloc_min_val:
+                    continue
+                
+                target = min(remaining, person_remaining, card_room)
+                if target < alloc_min_val:
+                    continue
+                
+                valid_amounts = [a for a in range(target, alloc_min_val - 1, -1) if is_valid_amount(a)]
+                if valid_amounts:
+                    amount = valid_amounts[0]
+                    allocations.append({
+                        'person_id': person.id,
+                        'person_name': person.name,
+                        'card_id': card.id,
+                        'card_no': card.card_no[-4:],
+                        'amount': amount,
+                        'task_date': task_date.strftime('%Y-%m-%d')
+                    })
+                    day_persons.add(person.id)
+                    remaining -= amount
+                    card_room -= amount
+
     return allocations, remaining, debug_info
 
 @transfer_task_bp.route('/create', methods=['POST'])
@@ -224,18 +299,20 @@ def create_task():
     data = request.json
     
     customer = Customer.query.get(data['customer_id'])
-    if not customer:
-        return jsonify({'code': 400, 'message': '客户不存在'})
+    bank = Bank.query.get(data['bank_id'])
     
-    # 获取客户的所有银行卡
+    if not customer or not bank:
+        return jsonify({'code': 400, 'message': '客户或银行不存在'})
+    
     cards = BankCard.query.filter(
         and_(
             BankCard.customer_id == data['customer_id'],
+            BankCard.bank_id == data['bank_id'],
             BankCard.status == 1
         )).all()
     
     if not cards:
-        return jsonify({'code': 400, 'message': '该客户没有可用的银行卡，请先添加银行卡'})
+        return jsonify({'code': 400, 'message': '该客户在此银行没有可用的银行卡，请先添加银行卡'})
     
     excluded_person_ids = data.get('excluded_person_ids', [])
     persons = Person.query.filter(
@@ -246,7 +323,9 @@ def create_task():
     
     if not persons:
         return jsonify({'code': 400, 'message': '没有可用的人员，请先添加人员'})
+    
 
+    
     start_date = datetime.strptime(data.get('task_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
     total_amount = int(data['total_amount'])
     
@@ -258,33 +337,36 @@ def create_task():
     if alloc_max:
         alloc_max = int(alloc_max)
     
-    # 使用新的按客户分配逻辑
-    allocations, remaining, debug_info = simulate_allocate_by_customer(
-        total_amount, data['customer_id'], persons, TaskDetail, 
-        start_date, alloc_min, alloc_max, force_allocate
-    )
+    allocations, remaining, debug_info = simulate_allocate(total_amount, cards, persons, TaskDetail, start_date, alloc_min, alloc_max, force_allocate)
     
-    if not allocations:
-        error_msg = debug_info.get('error', '没有可用的人员')
-        if 'skipped_reasons' in debug_info and debug_info['skipped_reasons']:
-            error_msg += '\n\n不满足条件的人员：\n' + '\n'.join(debug_info['skipped_reasons'])
+    if remaining > 0:
+        details = []
+        details.append(f"日期：{debug_info['task_date']}")
+        details.append(f"总人数：{debug_info['total_persons']}人，每日上限：{debug_info['day_cap']}人")
+        details.append(f"银行卡数：{debug_info['total_cards']}张")
+        
+        for card in debug_info['card_details']:
+            details.append(f"\n【卡号 ****{card['card_no']}】可用额度: ¥{card['card_room']}, 已分配: {card['assigned_count']}人")
+            if card['skipped_reasons']:
+                for person_code, reason in card['skipped_reasons'].items():
+                    details.append(f"  - {person_code}: {reason}")
+        
+        detail_str = '\n'.join(details)
         return jsonify({
             'code': 400,
-            'message': error_msg,
+            'message': f'无法完全分配：剩余 ¥{int(remaining)} 未分配\n\n{detail_str}',
             'data': {
+                'allocated_count': len(allocations),
                 'remaining_amount': int(remaining),
+                'preview': allocations[:10],
                 'debug_info': debug_info
             }
         })
     
-    # 获取涉及的银行（可能多个）
-    bank_ids = list(set(c.bank_id for c in cards))
-    primary_bank_id = bank_ids[0] if bank_ids else None
-    
     task = TransferTask(
-        task_name=data.get('task_name', f'{customer.name}_转账任务'),
+        task_name=data.get('task_name', f'{customer.name}_{bank.name}_转账任务'),
         customer_id=data['customer_id'],
-        bank_id=primary_bank_id,  # 主要银行ID（用于兼容）
+        bank_id=data['bank_id'],
         total_amount=total_amount,
         task_type='daily',
         start_date=start_date,
@@ -311,15 +393,11 @@ def create_task():
     
     return jsonify({
         'code': 200,
-        'message': f'任务创建成功！共分配给 {debug_info["selected_person"]} 负责 {customer.name} 的所有银行卡任务',
+        'message': f'任务创建成功！共分配 {len(allocations)} 条子任务',
         'data': {
             'task_id': task.id,
             'allocated_count': len(allocations),
-            'remaining_amount': 0,
-            'selected_person': debug_info['selected_person'],
-            'customer_name': customer.name,
-            'card_count': len(cards),
-            'preview': debug_info['allocations']
+            'remaining_amount': 0
         }
     })
 
@@ -424,21 +502,22 @@ def check_person_status():
     data = request.json
     
     customer_id = data.get('customer_id')
+    bank_id = data.get('bank_id')
     task_date = datetime.strptime(data.get('task_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
     
-    if not customer_id:
-        return jsonify({'code': 400, 'message': '请选择客户'})
+    if not customer_id or not bank_id:
+        return jsonify({'code': 400, 'message': '请选择客户和银行'})
     
-    # 获取客户的所有银行卡
     cards = BankCard.query.filter(
         and_(
             BankCard.customer_id == customer_id,
+            BankCard.bank_id == bank_id,
             BankCard.status == 1
         )
     ).all()
     
     if not cards:
-        return jsonify({'code': 400, 'message': '该客户没有可用的银行卡'})
+        return jsonify({'code': 400, 'message': '该客户在此银行没有可用的银行卡'})
     
     card_ids = [c.id for c in cards]
     
@@ -451,7 +530,6 @@ def check_person_status():
         consecutive_days = 0
         today_customer_count = 0
         
-        # 检查客户数量限制
         customer_count = TaskDetail.query.filter(
             and_(
                 TaskDetail.person_id == person.id,
@@ -466,6 +544,7 @@ def check_person_status():
             reason = f'今日已分配{customer_count}个客户任务，达到上限{MAX_CUSTOMERS_PER_PERSON}个'
             result.append({
                 'id': person.id,
+                'code': person.code,
                 'name': person.name,
                 'status': status,
                 'reason': reason,
@@ -474,17 +553,17 @@ def check_person_status():
             })
             continue
         
-        # 检查连续分配限制（检查该客户的所有银行卡）
         for card_id in card_ids:
             count = has_consecutive_allocation(person.id, card_id, task_date, TaskDetail, MAX_CONSECUTIVE_DAYS)
             if count:
                 consecutive_days = MAX_CONSECUTIVE_DAYS
                 status = 'blocked'
-                reason = f'已连续{MAX_CONSECUTIVE_DAYS}天分配该客户的银行卡，今日跳过'
+                reason = f'已连续{MAX_CONSECUTIVE_DAYS}天分配此卡，今日跳过'
                 break
         
         result.append({
             'id': person.id,
+            'code': person.code,
             'name': person.name,
             'status': status,
             'reason': reason,
