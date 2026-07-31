@@ -350,13 +350,15 @@ def get_calendar_data():
     person_id = data.get('person_id')
     bank_id = data.get('bank_id')
     
-    if customer_id or bank_id:
+    if customer_id:
         from models import TransferTask
         query = query.join(TransferTask)
-        if customer_id:
-            query = query.filter(TransferTask.customer_id == customer_id)
-        if bank_id:
-            query = query.filter(TransferTask.bank_id == bank_id)
+        query = query.filter(TransferTask.customer_id == customer_id)
+    
+    if bank_id:
+        from models import BankCard
+        query = query.join(BankCard, TaskDetail.card_id == BankCard.id)
+        query = query.filter(BankCard.bank_id == bank_id)
     
     if person_id:
         query = query.filter(TaskDetail.person_id == person_id)
@@ -391,7 +393,7 @@ def get_calendar_data():
             'customer_id': customer.id if customer else None,
             'customer_name': customer.name if customer else '',
             'customer_color': customer.color if customer and customer.color else '#409EFF',
-            'bank_id': d.task.bank_id if d.task else None,
+            'bank_id': d.card.bank_id if d.card else None,
             'bank_name': d.card.bank.name if d.card and d.card.bank else '',
             'status': d.status,
             'person_id': person_id,

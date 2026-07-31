@@ -4,7 +4,10 @@
       <template #header>
         <div class="card-header">
           <span>人员管理</span>
-          <el-button type="primary" @click="showAddDialog" :icon="Plus">添加人员</el-button>
+          <div>
+            <el-checkbox v-model="showAll" @change="toggleShowAll">显示全部（含已删除）</el-checkbox>
+            <el-button type="primary" @click="showAddDialog" :icon="Plus" style="margin-left: 12px;">添加人员</el-button>
+          </div>
         </div>
       </template>
 
@@ -53,6 +56,7 @@ import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const personList = ref([])
+const showAll = ref(false)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
@@ -65,11 +69,17 @@ onMounted(loadPersonList)
 
 async function loadPersonList() {
   try {
-    const res = await axios.get('/api/person/list')
+    const url = showAll.value ? '/api/person/list?show_all=1' : '/api/person/list'
+    const res = await axios.get(url)
     personList.value = res.data.data || []
   } catch (e) {
     console.error(e)
   }
+}
+
+function toggleShowAll() {
+  showAll.value = !showAll.value
+  loadPersonList()
 }
 
 function showAddDialog() {

@@ -528,7 +528,7 @@ function formatTaskDate(dateStr) {
 }
 
 const splitCache = {}
-const splitVersion = 'v2'
+const splitVersion = 'v3'
 
 function avoidRoundThousand(num) {
   const remainder = num % 1000
@@ -544,34 +544,43 @@ function getSplitAmount(task, part) {
   if (!splitCache[key]) {
     const total = Math.round(task.amount)
     
-    const str = `${task.id}-${task.customer_name}-${task.bank_name}-${task.task_date}`
-    let hash = 0
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash
+    if (total <= 2000) {
+      let first = Math.floor(total / 2)
+      let second = total - first
+      if (first % 10 === 0 && first > 0) first -= 1
+      if (second % 10 === 0 && second > 0) second -= 1
+      if (first + second !== total) second = total - first
+      splitCache[key] = [first, second]
+    } else {
+      const str = `${task.id}-${task.customer_name}-${task.bank_name}-${task.task_date}`
+      let hash = 0
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i)
+        hash = ((hash << 5) - hash) + char
+        hash = hash & hash
+      }
+      
+      const ratio1 = Math.abs(hash % 1000) / 1000 * 0.5 + 0.25
+      const ratio2 = Math.abs((hash >> 8) % 100) / 100 * 0.3 + 0.35
+      
+      const ratio = (ratio1 + ratio2) / 2
+      let first = Math.max(1000, Math.round(total * ratio))
+      first = avoidRoundThousand(first)
+      
+      let second = total - first
+      second = avoidRoundThousand(second)
+      
+      if (second < 1000) {
+        second = 1000
+        first = total - second
+      }
+      if (first < 1000) {
+        first = 1000
+        second = total - first
+      }
+      
+      splitCache[key] = [first, second]
     }
-    
-    const ratio1 = Math.abs(hash % 1000) / 1000 * 0.5 + 0.25
-    const ratio2 = Math.abs((hash >> 8) % 100) / 100 * 0.3 + 0.35
-    
-    const ratio = (ratio1 + ratio2) / 2
-    let first = Math.max(1000, Math.round(total * ratio))
-    first = avoidRoundThousand(first)
-    
-    let second = total - first
-    second = avoidRoundThousand(second)
-    
-    if (second < 1000) {
-      second = 1000
-      first = total - second
-    }
-    if (first < 1000) {
-      first = 1000
-      second = total - first
-    }
-    
-    splitCache[key] = [first, second]
   }
   return splitCache[key][part - 1]
 }

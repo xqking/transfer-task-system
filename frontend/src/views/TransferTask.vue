@@ -28,23 +28,6 @@
               </el-form-item>
             </el-col>
             <el-col :span="8">
-              <el-form-item label="选择银行" prop="bank_id">
-                <el-select 
-                  v-model="taskForm.bank_id" 
-                  placeholder="请选择银行" 
-                  style="width: 100%;"
-                  @change="onBankChange"
-                >
-                  <el-option 
-                    v-for="b in bankList" 
-                    :key="b.id" 
-                    :label="b.name" 
-                    :value="b.id"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
               <el-form-item label="任务日期" prop="task_date">
                 <el-date-picker
                   v-model="taskForm.task_date"
@@ -57,21 +40,6 @@
                 />
               </el-form-item>
             </el-col>
-          </el-row>
-
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="所需金额" prop="total_amount">
-                <el-input-number 
-                  v-model="taskForm.total_amount" 
-                  :min="2000" 
-                  :step="1000"
-                  :precision="0"
-                  :value-on-clear="30000"
-                  style="width: 100%;"
-                />
-              </el-form-item>
-            </el-col>
             <el-col :span="8">
               <el-form-item label="最低金额" prop="alloc_min">
                 <el-input-number 
@@ -79,10 +47,14 @@
                   :min="100" 
                   :step="100"
                   :precision="0"
+                  placeholder="可选"
                   style="width: 100%;"
                 />
               </el-form-item>
             </el-col>
+          </el-row>
+
+          <el-row :gutter="20" style="margin-bottom: 10px;">
             <el-col :span="8">
               <el-form-item label="最高金额" prop="alloc_max">
                 <el-input-number 
@@ -90,11 +62,71 @@
                   :min="100" 
                   :step="100"
                   :precision="0"
+                  placeholder="可选"
                   style="width: 100%;"
                 />
               </el-form-item>
             </el-col>
+            <el-col :span="8">
+              <el-form-item label="指定人员" prop="person_ids">
+                <el-select 
+                  v-model="taskForm.person_ids" 
+                  multiple 
+                  placeholder="不选则智能分配"
+                  filterable
+                  style="width: 100%;"
+                >
+                  <el-option 
+                    v-for="p in personList" 
+                    :key="p.id" 
+                    :label="p.name" 
+                    :value="p.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
           </el-row>
+
+          <el-form-item label="银行信息">
+            <div class="bank-amount-list">
+              <div v-for="(item, index) in bankAmountList" :key="item.card_id" class="bank-amount-row">
+                <div class="bank-name">
+                  <span class="bank-dot" :style="{ background: item.bank_color }"></span>
+                  {{ item.bank_name }}
+                  <span class="card-tail">{{ item.card_tail }}</span>
+                </div>
+                <el-input-number 
+                  v-model="item.amount" 
+                  :min="0" 
+                  :step="1000"
+                  :precision="0"
+                  :placeholder="'不填则自动分配'"
+                  style="width: 240px; margin-left: 20px;"
+                  size="large"
+                  controls-position="right"
+                />
+              </div>
+              <div v-if="bankAmountList.length === 0" class="empty-tip">
+                请先选择客户
+              </div>
+            </div>
+          </el-form-item>
+
+          <el-form-item style="margin-top: 20px;">
+            <div class="amount-summary" :class="{ warning: isAmountExceeded, ok: isAllSpecified && !isAmountExceeded }">
+              <div class="summary-item">
+                <span class="summary-label">已指定金额：</span>
+                <span class="summary-value">{{ totalSpecifiedAmount.toLocaleString() }}</span>
+              </div>
+              <div class="summary-divider" v-if="!isAllSpecified">/</div>
+              <div class="summary-item" v-if="!isAllSpecified">
+                <span class="summary-label">总金额（自动+手动）：</span>
+                <span class="summary-value">{{ totalAmount.toLocaleString() }}</span>
+              </div>
+              <div class="summary-tag ok" v-if="isAllSpecified && !isAmountExceeded">已全部指定</div>
+              <div class="summary-tag" v-else-if="!isAllSpecified">部分指定，剩余自动分配</div>
+            </div>
+          </el-form-item>
 
           <el-form-item>
             <el-button type="primary" @click="createTask(false)" :loading="creating">
@@ -134,7 +166,7 @@
             <div class="stat-label">跳过人数</div>
           </div>
           <div class="stat-item">
-            <div class="stat-value amount">¥{{ taskForm.total_amount.toLocaleString() }}</div>
+            <div class="stat-value amount">¥{{ totalAmount.toLocaleString() }}</div>
             <div class="stat-label">总金额</div>
           </div>
         </div>
@@ -305,21 +337,37 @@ const creating = ref(false)
 
 const taskForm = ref({
   customer_id: '',
-  bank_id: '',
-  total_amount: 30000,
+  total_amount: null,
   task_date: new Date().toISOString().slice(0, 10),
-  alloc_min: 2000,
-  alloc_max: 20000,
-  remark: ''
+  alloc_min: null,
+  alloc_max: null,
+  remark: '',
+  person_ids: []
+})
+
+const bankAmountList = ref([])
+
+const totalSpecifiedAmount = computed(() => {
+  return bankAmountList.value.reduce((sum, item) => sum + (item.amount || 0), 0)
+})
+
+const isAllSpecified = computed(() => {
+  return bankAmountList.value.length > 0 && bankAmountList.value.every(item => item.amount && item.amount > 0)
+})
+
+const isAmountExceeded = computed(() => {
+  return false
+})
+
+const totalAmount = computed(() => {
+  return totalSpecifiedAmount.value || 0
 })
 
 const allocationResult = ref(null)
 const allocationDetails = ref([])
 
 const rules = {
-  customer_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
-  bank_id: [{ required: true, message: '请选择银行', trigger: 'change' }],
-  total_amount: [{ required: true, message: '请输入转账金额', trigger: 'blur' }]
+  customer_id: [{ required: true, message: '请选择客户', trigger: 'change' }]
 }
 
 onMounted(async () => {
@@ -362,30 +410,31 @@ async function loadPersons() {
   }
 }
 
-function onBankChange() {
-  checkPersonStatus()
-}
-
 function onCustomerChange() {
-  checkPersonStatus()
+  loadCustomerCards()
 }
 
-async function checkPersonStatus() {
-  if (!taskForm.value.customer_id || !taskForm.value.bank_id) {
-    personStatusList.value = []
+async function loadCustomerCards() {
+  if (!taskForm.value.customer_id) {
+    bankAmountList.value = []
     return
   }
-  
   try {
-    const res = await axios.post('/api/task/check-person-status', {
-      customer_id: taskForm.value.customer_id,
-      bank_id: taskForm.value.bank_id,
-      task_date: taskForm.value.task_date
+    const res = await axios.get('/api/customer/cards', {
+      params: { customer_id: taskForm.value.customer_id }
     })
-    personStatusList.value = res.data.data || []
+    const cards = res.data.data || []
+    bankAmountList.value = cards.map(c => ({
+      card_id: c.id,
+      bank_id: c.bank_id,
+      bank_name: c.bank_name || c.bank?.name,
+      bank_color: c.bank_color || '#666',
+      card_tail: c.card_number ? `****${c.card_number.slice(-4)}` : '',
+      amount: null
+    }))
   } catch (e) {
     console.error(e)
-    personStatusList.value = []
+    bankAmountList.value = []
   }
 }
 
@@ -410,13 +459,28 @@ async function createTask(forceAllocate = false) {
     return
   }
 
+  const hasBankAmount = bankAmountList.value.some(item => item.amount && item.amount > 0)
+  if (!hasBankAmount) {
+    ElMessage.warning('请至少指定一个银行的金额')
+    return
+  }
+
   creating.value = true
   try {
     const data = {
-      ...taskForm.value,
-      excluded_person_ids: Array.from(unselectedPersonIds.value),
+      customer_id: taskForm.value.customer_id,
+      total_amount: totalAmount.value,
+      task_date: taskForm.value.task_date,
       alloc_min: taskForm.value.alloc_min,
       alloc_max: taskForm.value.alloc_max,
+      remark: taskForm.value.remark,
+      person_ids: taskForm.value.person_ids,
+      excluded_person_ids: Array.from(unselectedPersonIds.value),
+      bank_amounts: bankAmountList.value.map(item => ({
+        card_id: item.card_id,
+        bank_id: item.bank_id,
+        amount: item.amount || null
+      })),
       force_allocate: forceAllocate
     }
     const res = await axios.post('/api/task/create', data)
@@ -444,11 +508,14 @@ async function createTask(forceAllocate = false) {
 function resetForm() {
   taskForm.value = {
     customer_id: '',
-    bank_id: '',
-    total_amount: 30000,
+    total_amount: null,
     task_date: new Date().toISOString().slice(0, 10),
-    remark: ''
+    alloc_min: null,
+    alloc_max: null,
+    remark: '',
+    person_ids: []
   }
+  bankAmountList.value = []
   allocationResult.value = null
   allocationDetails.value = []
 }
@@ -728,5 +795,109 @@ function getStatusText(status) {
   margin: 0 0 15px 0;
   font-size: 16px;
   color: #303133;
+}
+
+/* 银行金额输入列表 */
+.bank-amount-list {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.bank-amount-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.bank-amount-row:last-child {
+  border-bottom: none;
+}
+
+.bank-name {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  min-width: 160px;
+}
+
+.bank-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.card-tail {
+  font-size: 13px;
+  color: #909399;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+.empty-tip {
+  text-align: center;
+  padding: 30px 0;
+  color: #909399;
+  font-size: 14px;
+}
+
+.amount-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: #ecf5ff;
+  border-radius: 10px;
+  padding: 16px 24px;
+}
+
+.amount-summary.ok {
+  background: #f0f9eb;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-label {
+  font-size: 15px;
+  color: #606266;
+}
+
+.summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #409eff;
+}
+
+.amount-summary.ok .summary-value {
+  color: #67c23a;
+}
+
+.summary-divider {
+  color: #c0c4cc;
+  font-size: 20px;
+}
+
+.summary-tag {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #909399;
+  background: #fff;
+  border: 1px solid #dcdfe6;
+}
+
+.summary-tag.ok {
+  color: #67c23a;
+  border-color: #c2e7b0;
+  background: #f0f9eb;
 }
 </style>

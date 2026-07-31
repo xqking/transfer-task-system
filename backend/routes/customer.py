@@ -101,3 +101,32 @@ def get_banks():
         'code': 200,
         'data': [{'id': b.id, 'name': b.name, 'code': b.code} for b in banks]
     })
+
+@customer_bp.route('/cards', methods=['GET'])
+def get_customer_cards():
+    from models import BankCard, Bank
+    customer_id = request.args.get('customer_id')
+    if not customer_id:
+        return jsonify({'code': 400, 'message': '请选择客户'})
+    
+    cards = BankCard.query.filter_by(
+        customer_id=int(customer_id),
+        status=1
+    ).all()
+    
+    result = []
+    for card in cards:
+        bank = Bank.query.get(card.bank_id)
+        result.append({
+            'id': card.id,
+            'bank_id': card.bank_id,
+            'bank_name': bank.name if bank else '',
+            'bank_color': bank.color if bank and hasattr(bank, 'color') else '#666',
+            'card_number': card.card_no,
+            'card_tail': card.card_no[-4:] if card.card_no else ''
+        })
+    
+    return jsonify({
+        'code': 200,
+        'data': result
+    })

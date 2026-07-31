@@ -6,7 +6,11 @@ person_bp = Blueprint('person', __name__)
 @person_bp.route('/list', methods=['GET'])
 def get_person_list():
     from models import Person
-    persons = Person.query.order_by(Person.id).all()
+    show_all = request.args.get('show_all', '0') == '1'
+    if show_all:
+        persons = Person.query.order_by(Person.id).all()
+    else:
+        persons = Person.query.filter_by(status=1).order_by(Person.id).all()
     return jsonify({
         'code': 200,
         'data': [{
